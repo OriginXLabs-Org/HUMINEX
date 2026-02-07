@@ -1,8 +1,6 @@
-using Huminex.BuildingBlocks.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace Huminex.Tests.Integration.Infrastructure;
@@ -21,13 +19,6 @@ public sealed class HuminexApiFactory(string postgresConnectionString) : WebAppl
             };
 
             configBuilder.AddInMemoryCollection(testOverrides);
-        });
-
-        builder.ConfigureServices(services =>
-        {
-            using var scope = services.BuildServiceProvider().CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            dbContext.Database.EnsureCreated();
         });
     }
 

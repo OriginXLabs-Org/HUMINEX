@@ -30,3 +30,9 @@ Huminex-Automation/test-results
 .env
 .env.*
 !.env.example
+
+# .NET build outputs
+**/bin/
+**/obj/
+TestResults/
+*.trx
