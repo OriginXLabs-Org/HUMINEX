@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: huminex-api-health-analysis
+  namespace: huminex
+spec:
+  metrics:
+    - name: health-endpoint-check
+      interval: 30s
+      count: 4
+      successCondition: result == "Healthy"
+      failureLimit: 1
+      provider:
+        web:
+          url: http://huminex-api.huminex.svc.cluster.local/health/live
+          method: GET
+          timeoutSeconds: 5
+          jsonPath: "{$}"

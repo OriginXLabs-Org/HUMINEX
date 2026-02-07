@@ -4,6 +4,7 @@ resources:
   - ../../base
 patches:
   - path: rollout-dev-patch.yaml
+  - path: analysis-template-dev-patch.yaml
 images:
   - name: huminex.azurecr.io/huminex-api
     newName: huminexdevacrohx5ka.azurecr.io/huminex-api
