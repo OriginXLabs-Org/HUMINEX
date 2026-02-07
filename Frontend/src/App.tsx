@@ -1,0 +1,195 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { HelmetProvider } from "react-helmet-async";
+import { AnimatePresence, motion } from "framer-motion";
+import { ClickstreamTracker } from "@/components/ClickstreamTracker";
+import { SessionRecorder } from "@/components/SessionRecorder";
+import { SplashScreen } from "@/components/SplashScreen";
+import { useScrollToTop } from "@/hooks/useScrollToTop";
+import { useState, useEffect } from "react";
+import Index from "./pages/Index";
+import Features from "./pages/Features";
+import ModuleDetail from "./pages/modules/ModuleDetail";
+import About from "./pages/About";
+import Contact from "./pages/Contact";
+import Industries from "./pages/Industries";
+import IndustryDetail from "./pages/industries/IndustryDetail";
+import GetQuote from "./pages/GetQuote";
+import Pricing from "./pages/Pricing";
+import Partners from "./pages/Partners";
+import Auth from "./pages/Auth";
+import Onboarding from "./pages/Onboarding";
+import Portal from "./pages/Portal";
+import NotFound from "./pages/NotFound";
+import ResetPassword from "./pages/ResetPassword";
+import PayrollSoftware from "./pages/PayrollSoftware";
+import HRSoftware from "./pages/HRSoftware";
+import FinanceAutomation from "./pages/FinanceAutomation";
+import EnterpriseHRMS from "./pages/EnterpriseHRMS";
+
+// Service pages
+import DigitalEngineering from "./pages/services/DigitalEngineering";
+import AIAutomation from "./pages/services/AIAutomation";
+import ExperienceDesign from "./pages/services/ExperienceDesign";
+import CloudDevOps from "./pages/services/CloudDevOps";
+import EnterpriseConsulting from "./pages/services/EnterpriseConsulting";
+import ManagedIT from "./pages/services/ManagedIT";
+import Cybersecurity from "./pages/services/Cybersecurity";
+import IndustrySolutions from "./pages/services/IndustrySolutions";
+
+// Admin pages
+import AdminAuth from "./pages/admin/AdminAuth";
+import AdminPage from "./pages/admin/AdminPage";
+
+// Portal pages
+import PortalAuth from "./pages/portal/PortalAuth";
+
+// Tenant pages
+import TenantAuth from "./pages/tenant/TenantAuth";
+import TenantPortal from "./pages/tenant/TenantPortal";
+import PortalGuard from "./components/guards/PortalGuard";
+import TenantGuard from "./components/guards/TenantGuard";
+
+const queryClient = new QueryClient();
+
+// Page transition variants
+const pageVariants = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+};
+
+const pageTransition = {
+  type: "tween",
+  ease: "anticipate",
+  duration: 0.3,
+};
+
+// Animated Routes wrapper component
+const AnimatedRoutes = () => {
+  const location = useLocation();
+  
+  // Scroll to top on route change
+  useScrollToTop();
+  
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={location.pathname}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        variants={pageVariants}
+        transition={pageTransition}
+      >
+        <Routes location={location}>
+          <Route path="/" element={<Index />} />
+          <Route path="/features" element={<Features />} />
+          <Route path="/modules/:slug" element={<ModuleDetail />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/industries" element={<Industries />} />
+          <Route path="/industries/:slug" element={<IndustryDetail />} />
+          <Route path="/get-quote" element={<GetQuote />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/partners" element={<Partners />} />
+          <Route path="/payroll-software" element={<PayrollSoftware />} />
+          <Route path="/hr-software" element={<HRSoftware />} />
+          <Route path="/finance-automation" element={<FinanceAutomation />} />
+          <Route path="/enterprise-hrms" element={<EnterpriseHRMS />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          
+          {/* Client Portal Routes - Employee access (unlocked by Tenant Admin) */}
+          <Route path="/portal/login" element={<PortalAuth />} />
+          <Route
+            path="/portal/*"
+            element={
+              <PortalGuard>
+                <Portal />
+              </PortalGuard>
+            }
+          />
+          
+          {/* Admin Dashboard Routes - HUMINEX Global Admin (OriginX Labs Internal) */}
+          <Route path="/admin/login" element={<AdminAuth />} />
+          <Route path="/admin/*" element={<AdminPage />} />
+          
+          {/* Tenant Super-Admin Portal Routes - Client Organization Admin */}
+          <Route path="/tenant/login" element={<TenantAuth />} />
+          <Route
+            path="/tenant/*"
+            element={
+              <TenantGuard requiredRole="admin">
+                <TenantPortal />
+              </TenantGuard>
+            }
+          />
+          
+          {/* Service Pages */}
+          <Route path="/services/digital-engineering" element={<DigitalEngineering />} />
+          <Route path="/services/ai-automation" element={<AIAutomation />} />
+          <Route path="/services/experience-design" element={<ExperienceDesign />} />
+          <Route path="/services/cloud-devops" element={<CloudDevOps />} />
+          <Route path="/services/enterprise-consulting" element={<EnterpriseConsulting />} />
+          <Route path="/services/managed-it" element={<ManagedIT />} />
+          <Route path="/services/cybersecurity" element={<Cybersecurity />} />
+          <Route path="/services/industry-solutions" element={<IndustrySolutions />} />
+          
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+
+const AppContent = () => {
+  const [showSplash, setShowSplash] = useState(true);
+  const [hasShownSplash, setHasShownSplash] = useState(false);
+
+  useEffect(() => {
+    // Check if splash has been shown in this session
+    const splashShown = sessionStorage.getItem('huminex_splash_shown');
+    if (splashShown) {
+      setShowSplash(false);
+      setHasShownSplash(true);
+    }
+  }, []);
+
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+    setHasShownSplash(true);
+    sessionStorage.setItem('huminex_splash_shown', 'true');
+  };
+
+  return (
+    <>
+      {showSplash && !hasShownSplash && (
+        <SplashScreen onComplete={handleSplashComplete} />
+      )}
+      <BrowserRouter>
+        <ClickstreamTracker />
+        <SessionRecorder enabled={true} />
+        <AnimatedRoutes />
+      </BrowserRouter>
+    </>
+  );
+};
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <HelmetProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <AppContent />
+      </TooltipProvider>
+    </HelmetProvider>
+  </QueryClientProvider>
+);
+
+export default App;

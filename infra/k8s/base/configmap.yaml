@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: huminex-api-config
+  namespace: huminex
+data:
+  ASPNETCORE_URLS: "http://+:8080"
+  HUMINEX_Postgres__ApplyMigrationsOnStartup: "false"
+  HUMINEX_DevSecurity__EnableHeaderIdentityFallback: "false"
+  HUMINEX_FeatureManagement__OpenHumanInterviewStudio: "false"
+  HUMINEX_FeatureManagement__PayrollV2: "false"

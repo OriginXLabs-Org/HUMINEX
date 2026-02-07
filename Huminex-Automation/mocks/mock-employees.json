@@ -1,0 +1,16 @@
+[
+  {
+    "employeeId": "ff6f8cbf-3078-41f4-b5d7-cd8ceaf5f85d",
+    "name": "Kiran Sen",
+    "role": "Senior Engineer",
+    "department": "Engineering",
+    "manager": "Aarav Mehta"
+  },
+  {
+    "employeeId": "f9210adf-6da9-4d87-b0d0-b4f88f5713de",
+    "name": "Nisha Rao",
+    "role": "HR Manager",
+    "department": "Human Resources",
+    "manager": "Dev Khanna"
+  }
+]

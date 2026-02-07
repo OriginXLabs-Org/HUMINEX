@@ -1,0 +1,37 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Api/">
+    <Project Path="src/Api/Huminex.Api/Huminex.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks.Application/">
+    <Project Path="src/BuildingBlocks.Application/Huminex.BuildingBlocks.Application.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks.Contracts/">
+    <Project Path="src/BuildingBlocks.Contracts/Huminex.BuildingBlocks.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks.Domain/">
+    <Project Path="src/BuildingBlocks.Domain/Huminex.BuildingBlocks.Domain.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks.Infrastructure/">
+    <Project Path="src/BuildingBlocks.Infrastructure/Huminex.BuildingBlocks.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks.Observability/">
+    <Project Path="src/BuildingBlocks.Observability/Huminex.BuildingBlocks.Observability.csproj" />
+  </Folder>
+  <Folder Name="/src/ModuleContracts/">
+    <Project Path="src/ModuleContracts/Huminex.ModuleContracts.csproj" />
+  </Folder>
+  <Folder Name="/src/SharedKernel/">
+    <Project Path="src/SharedKernel/Huminex.SharedKernel.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/Architecture/">
+    <Project Path="tests/Architecture/Huminex.Tests.Architecture.csproj" />
+  </Folder>
+  <Folder Name="/tests/Integration/">
+    <Project Path="tests/Integration/Huminex.Tests.Integration.csproj" />
+  </Folder>
+  <Folder Name="/tests/Unit/">
+    <Project Path="tests/Unit/Huminex.Tests.Unit.csproj" />
+  </Folder>
+</Solution>

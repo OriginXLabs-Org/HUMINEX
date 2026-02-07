@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Private and authenticated application areas
+Disallow: /admin/
+Disallow: /portal/
+Disallow: /tenant/
+Disallow: /reset-password
+
+Sitemap: https://www.gethuminex.com/sitemap.xml

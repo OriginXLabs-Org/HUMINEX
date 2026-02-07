@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "Vivv8sU2Uus=",
+  "success": true,
+  "projectFilePath": "/Users/abhishekpanda/Documents/ORIGINX LABS PVT. LTD./Huminex/Backend/src/ModuleContracts/Huminex.ModuleContracts.csproj",
+  "expectedPackageFiles": [
+    "/Users/abhishekpanda/.nuget/packages/microsoft.netcore.app.ref/8.0.23/microsoft.netcore.app.ref.8.0.23.nupkg.sha512",
+    "/Users/abhishekpanda/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.23/microsoft.aspnetcore.app.ref.8.0.23.nupkg.sha512"
+  ],
+  "logs": []
+}

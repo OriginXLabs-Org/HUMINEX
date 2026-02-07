@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\BuildingBlocks.Contracts\Huminex.BuildingBlocks.Contracts.csproj" />
+    <ProjectReference Include="..\BuildingBlocks.Domain\Huminex.BuildingBlocks.Domain.csproj" />
+    <ProjectReference Include="..\SharedKernel\Huminex.SharedKernel.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

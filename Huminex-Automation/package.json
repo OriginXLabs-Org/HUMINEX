@@ -1,0 +1,18 @@
+{
+  "name": "huminex-automation",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test:ui": "playwright test",
+    "test:ui:headed": "playwright test --headed",
+    "test:api": "tsx api/api-smoke.ts",
+    "test:load": "k6 run load/payroll-load.js",
+    "test:all": "npm run test:api && npm run test:ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

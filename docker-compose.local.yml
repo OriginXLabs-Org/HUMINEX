@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: huminex-pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: huminex
+    ports:
+      - "5434:5432"
+    volumes:
+      - huminex_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d huminex"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: huminex-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Backend/Dockerfile
+    container_name: huminex-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HUMINEX_Postgres__ConnectionString: Host=postgres;Port=5432;Database=huminex;Username=postgres;Password=postgres
+      HUMINEX_Postgres__ApplyMigrationsOnStartup: "true"
+      HUMINEX_DevSecurity__EnableHeaderIdentityFallback: "false"
+      HUMINEX_DevSecurity__FallbackTenantId: 11111111-1111-1111-1111-111111111111
+      HUMINEX_DevSecurity__FallbackUserId: 22222222-2222-2222-2222-222222222222
+      HUMINEX_DevSecurity__FallbackUserEmail: admin@gethuminex.com
+      HUMINEX_DevSecurity__FallbackRole: admin
+      HUMINEX_DevSecurity__FallbackPermissions__0: org.read
+      HUMINEX_DevSecurity__FallbackPermissions__1: org.write
+      HUMINEX_DevSecurity__FallbackPermissions__2: workforce.portal-access.write
+      HUMINEX_DevSecurity__FallbackPermissions__3: payroll.read
+      HUMINEX_DevSecurity__FallbackPermissions__4: payroll.write
+      HUMINEX_DevSecurity__FallbackPermissions__5: rbac.read
+      HUMINEX_DevSecurity__FallbackPermissions__6: rbac.write
+      HUMINEX_DevSecurity__FallbackPermissions__7: user.read.self
+      HUMINEX_DevSecurity__FallbackPermissions__8: user.roles.write
+    ports:
+      - "5035:8080"
+
+volumes:
+  huminex_pg_data:

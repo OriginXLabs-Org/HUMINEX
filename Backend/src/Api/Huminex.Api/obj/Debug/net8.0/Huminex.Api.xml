@@ -1,0 +1,294 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Huminex.Api</name>
+    </assembly>
+    <members>
+        <member name="T:Huminex.Api.Controllers.AuthController">
+            <summary>
+            Authentication APIs for login, refresh, and logout operations.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.AuthController.Login(Huminex.ModuleContracts.IdentityAccess.LoginRequest)">
+            <summary>
+            Authenticates a user and returns an access token and refresh token.
+            </summary>
+            <param name="request">Login credentials payload.</param>
+            <returns>Token pair with expiry metadata.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.AuthController.Refresh(Huminex.ModuleContracts.IdentityAccess.RefreshTokenRequest)">
+            <summary>
+            Issues a new access token using a valid refresh token.
+            </summary>
+            <param name="request">Refresh token payload.</param>
+            <returns>New token pair preserving refresh token lifecycle.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.AuthController.Logout(Huminex.ModuleContracts.IdentityAccess.LogoutRequest)">
+            <summary>
+            Invalidates a refresh token for the current user session.
+            </summary>
+            <param name="request">Refresh token to revoke.</param>
+            <returns>No content when logout is accepted.</returns>
+        </member>
+        <member name="T:Huminex.Api.Controllers.OpenHumanController">
+            <summary>
+            OpenHuman interview lifecycle APIs.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OpenHumanController.Schedule(Huminex.ModuleContracts.OpenHuman.ScheduleInterviewRequest)">
+            <summary>
+            Schedules a new interview session for a candidate.
+            </summary>
+            <param name="request">Interview scheduling payload.</param>
+            <returns>Created interview summary.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OpenHumanController.GetAll">
+            <summary>
+            Lists interviews visible to the requester.
+            </summary>
+            <returns>Interview summary collection.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OpenHumanController.GetById(System.Guid)">
+            <summary>
+            Gets a specific interview by identifier.
+            </summary>
+            <param name="id">Interview identifier.</param>
+            <returns>Interview summary details.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OpenHumanController.Reschedule(System.Guid,Huminex.ModuleContracts.OpenHuman.RescheduleInterviewRequest)">
+            <summary>
+            Reschedules an existing interview.
+            </summary>
+            <param name="id">Interview identifier.</param>
+            <param name="request">Reschedule payload.</param>
+            <returns>Updated interview summary.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OpenHumanController.Scorecard(System.Guid)">
+            <summary>
+            Returns detailed interview scoring card.
+            </summary>
+            <param name="id">Interview identifier.</param>
+            <returns>Scorecard with weighted dimensions.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OpenHumanController.Transcript(System.Guid)">
+            <summary>
+            Returns transcript artifact reference for an interview.
+            </summary>
+            <param name="id">Interview identifier.</param>
+            <returns>Transcript download information.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OpenHumanController.Recording(System.Guid)">
+            <summary>
+            Returns recording artifact metadata for an interview.
+            </summary>
+            <param name="id">Interview identifier.</param>
+            <returns>Recording URL and retention expiry.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OpenHumanController.Export(System.Guid)">
+            <summary>
+            Exports interview result artifacts for HR and hiring manager workflows.
+            </summary>
+            <param name="id">Interview identifier.</param>
+            <returns>Export artifact URL.</returns>
+        </member>
+        <member name="T:Huminex.Api.Controllers.OrganizationController">
+            <summary>
+            Organization hierarchy and employee directory APIs.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OrganizationController.#ctor(Huminex.BuildingBlocks.Infrastructure.Persistence.Repositories.IOrganizationRepository)">
+            <summary>
+            Organization hierarchy and employee directory APIs.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OrganizationController.GetStructure(System.Threading.CancellationToken)">
+            <summary>
+            Returns hierarchy nodes for organization tree rendering.
+            </summary>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Organization node collection with manager links.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OrganizationController.GetEmployees(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Returns paginated employees for the current tenant.
+            </summary>
+            <param name="page">Page number starting from 1.</param>
+            <param name="pageSize">Items per page.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Paginated employee list.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OrganizationController.GetEmployeeById(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Returns a single employee by identifier inside tenant scope.
+            </summary>
+            <param name="employeeId">Employee identifier.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Employee details when found.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OrganizationController.GetManagerChain(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Returns manager chain from direct manager to top-level manager.
+            </summary>
+            <param name="employeeId">Employee identifier.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Ordered manager chain.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.OrganizationController.GetDirectReports(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Returns direct reports for a manager.
+            </summary>
+            <param name="managerId">Manager employee identifier.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Employees reporting to the manager.</returns>
+        </member>
+        <member name="T:Huminex.Api.Controllers.PayrollController">
+            <summary>
+            Payroll processing and payslip APIs.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.PayrollController.#ctor(Huminex.BuildingBlocks.Infrastructure.Persistence.Repositories.IPayrollRepository,Huminex.BuildingBlocks.Infrastructure.Persistence.Repositories.IAuditTrailRepository,Huminex.BuildingBlocks.Contracts.Auth.ITenantProvider,Huminex.Api.Services.IPayrollDocumentStorage,Huminex.Api.Services.IBusinessEventPublisher)">
+            <summary>
+            Payroll processing and payslip APIs.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.PayrollController.GetRuns(System.Threading.CancellationToken)">
+            <summary>
+            Lists payroll runs for the current tenant ordered by period descending.
+            </summary>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Payroll run collection.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.PayrollController.CreateRun(Huminex.ModuleContracts.Payroll.CreatePayrollRunRequest,System.Threading.CancellationToken)">
+            <summary>
+            Creates a new payroll run for a specific yyyy-MM period.
+            </summary>
+            <param name="request">Run creation payload.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Created payroll run.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.PayrollController.ApproveRun(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Approves a payroll run.
+            </summary>
+            <param name="runId">Payroll run identifier.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Run action status payload.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.PayrollController.DisburseRun(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Marks a payroll run as disbursed.
+            </summary>
+            <param name="runId">Payroll run identifier.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Run action status payload.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.PayrollController.GetPayslips(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Lists all payslips for an employee.
+            </summary>
+            <param name="employeeId">Employee identifier.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Payslip list ordered by period descending.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.PayrollController.GetPayslipByPeriod(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Returns a single payslip for an employee and yyyy-MM period.
+            </summary>
+            <param name="employeeId">Employee identifier.</param>
+            <param name="period">Period in yyyy-MM format.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Payslip for the requested period.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.PayrollController.EmailPayslip(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Queues email delivery for an employee payslip for a specific period.
+            </summary>
+            <param name="employeeId">Employee identifier.</param>
+            <param name="period">Period in yyyy-MM format.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Email dispatch state payload.</returns>
+        </member>
+        <member name="T:Huminex.Api.Controllers.RbacController">
+            <summary>
+            RBAC policy administration APIs.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.RbacController.#ctor(Huminex.BuildingBlocks.Infrastructure.Persistence.Repositories.IRbacRepository)">
+            <summary>
+            RBAC policy administration APIs.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.RbacController.GetPolicies(System.Threading.CancellationToken)">
+            <summary>
+            Lists permission policies available for the current tenant.
+            </summary>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Policy list with associated permissions.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.RbacController.UpdatePolicy(System.String,Huminex.ModuleContracts.IdentityAccess.UpdatePolicyRequest,System.Threading.CancellationToken)">
+            <summary>
+            Creates or updates a policy's permission set for the current tenant.
+            </summary>
+            <param name="id">Policy identifier.</param>
+            <param name="request">Permissions to persist.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>No content when policy upsert succeeds.</returns>
+        </member>
+        <member name="T:Huminex.Api.Controllers.SystemController">
+            <summary>
+            Platform-level health and diagnostics endpoints.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.SystemController.Health">
+            <summary>
+            Returns service health status for uptime probes and monitoring.
+            </summary>
+            <returns>Health metadata including service name and UTC timestamp.</returns>
+        </member>
+        <member name="T:Huminex.Api.Controllers.UsersController">
+            <summary>
+            User profile and role-management APIs.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.UsersController.#ctor(Huminex.BuildingBlocks.Infrastructure.Persistence.Repositories.IUserRepository,Huminex.BuildingBlocks.Contracts.Auth.ITenantProvider)">
+            <summary>
+            User profile and role-management APIs.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.UsersController.Me(System.Threading.CancellationToken)">
+            <summary>
+            Returns the current authenticated user's profile within tenant scope.
+            </summary>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>User identity profile with resolved role.</returns>
+        </member>
+        <member name="M:Huminex.Api.Controllers.UsersController.UpdateRoles(System.Guid,Huminex.ModuleContracts.IdentityAccess.UpdateUserRolesRequest,System.Threading.CancellationToken)">
+            <summary>
+            Replaces role assignments for a specific user in the same tenant.
+            </summary>
+            <param name="id">Target user identifier.</param>
+            <param name="request">New role set to apply.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>No content when role update succeeds.</returns>
+        </member>
+        <member name="T:Huminex.Api.Controllers.WorkforceController">
+            <summary>
+            Workforce controls for employee portal access and visibility.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.WorkforceController.#ctor(Huminex.BuildingBlocks.Infrastructure.Persistence.Repositories.IOrganizationRepository)">
+            <summary>
+            Workforce controls for employee portal access and visibility.
+            </summary>
+        </member>
+        <member name="M:Huminex.Api.Controllers.WorkforceController.UpdatePortalAccess(System.Guid,Huminex.ModuleContracts.Workforce.PortalAccessRequest,System.Threading.CancellationToken)">
+            <summary>
+            Enables or disables employee portal access and allowed widgets.
+            </summary>
+            <param name="employeeId">Employee identifier.</param>
+            <param name="request">Portal access settings payload.</param>
+            <param name="cancellationToken">Request cancellation token.</param>
+            <returns>Updated portal-access state.</returns>
+        </member>
+    </members>
+</doc>

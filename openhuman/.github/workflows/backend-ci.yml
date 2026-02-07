@@ -1,0 +1,14 @@
+name: OpenHuman Backend CI
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: echo "OpenHuman backend skeleton - add projects before enabling dotnet build"

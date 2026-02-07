@@ -1,0 +1,85 @@
+name: HUMINEX Backend CI
+
+on:
+  push:
+    paths:
+      - 'Backend/**'
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+      - '.github/workflows/backend-image-push.yml'
+  pull_request:
+    paths:
+      - 'Backend/**'
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+      - '.github/workflows/backend-image-push.yml'
+
+jobs:
+  backend-build-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: |
+          dotnet restore Backend/src/Api/Huminex.Api/Huminex.Api.csproj
+          dotnet restore Backend/tests/Unit/Huminex.Tests.Unit.csproj
+          dotnet restore Backend/tests/Integration/Huminex.Tests.Integration.csproj
+          dotnet restore Backend/tests/Architecture/Huminex.Tests.Architecture.csproj
+
+      - name: Build
+        run: dotnet build Backend/src/Api/Huminex.Api/Huminex.Api.csproj --configuration Release --no-restore
+
+      - name: Test
+        run: |
+          dotnet test Backend/tests/Unit/Huminex.Tests.Unit.csproj --configuration Release --no-restore
+          dotnet test Backend/tests/Integration/Huminex.Tests.Integration.csproj --configuration Release --no-restore
+
+      - name: API Contract Checks
+        run: dotnet test Backend/tests/Architecture/Huminex.Tests.Architecture.csproj --configuration Release --no-build --filter "FullyQualifiedName~ApiContractTests"
+
+      - name: SonarQube Scan (Optional)
+        if: ${{ secrets.SONAR_TOKEN != '' && secrets.SONAR_HOST_URL != '' }}
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: .
+          args: >
+            -Dsonar.projectKey=huminex-backend
+            -Dsonar.sources=Backend/src
+            -Dsonar.tests=Backend/tests
+            -Dsonar.cs.vstest.reportsPaths=**/TestResults/*.trx
+
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy FS scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif

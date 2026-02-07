@@ -1,0 +1,24 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">HUMINEX Mark</title>
+  <desc id="desc">Rounded square gradient icon with stylized H monogram.</desc>
+  <defs>
+    <linearGradient id="bg" x1="32" y1="24" x2="224" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B2F4A"/>
+      <stop offset="0.55" stop-color="#0B74D4"/>
+      <stop offset="1" stop-color="#00C2FF"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="74" y1="56" x2="188" y2="206" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#CFF4FF"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="256" height="256" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0B2F4A" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <rect x="24" y="24" width="208" height="208" rx="52" fill="url(#bg)"/>
+    <path d="M84 68V188M172 68V188M84 128H172" stroke="url(#stroke)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="84" cy="68" r="9" fill="#E9FBFF"/>
+    <circle cx="172" cy="188" r="9" fill="#E9FBFF"/>
+  </g>
+</svg>

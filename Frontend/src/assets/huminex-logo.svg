@@ -1,0 +1,22 @@
+<svg width="680" height="160" viewBox="0 0 680 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">HUMINEX Logo</title>
+  <desc id="desc">HUMINEX wordmark with monogram icon.</desc>
+  <defs>
+    <linearGradient id="mark-bg" x1="16" y1="12" x2="144" y2="148" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B2F4A"/>
+      <stop offset="0.55" stop-color="#0B74D4"/>
+      <stop offset="1" stop-color="#00C2FF"/>
+    </linearGradient>
+    <linearGradient id="mark-stroke" x1="50" y1="32" x2="110" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#CFF4FF"/>
+    </linearGradient>
+    <linearGradient id="text-gradient" x1="180" y1="26" x2="600" y2="134" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0F1E3A"/>
+      <stop offset="1" stop-color="#005EEB"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="128" height="128" rx="30" fill="url(#mark-bg)"/>
+  <path d="M54 44V116M106 44V116M54 80H106" stroke="url(#mark-stroke)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="176" y="96" fill="url(#text-gradient)" font-family="'Plus Jakarta Sans', 'Segoe UI', sans-serif" font-size="78" font-weight="800" letter-spacing="4">HUMINEX</text>
+</svg>

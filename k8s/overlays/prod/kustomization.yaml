@@ -1,0 +1,4 @@
+resources:
+  - ../../base
+
+# TODO: add prod-specific rollout/ingress patches

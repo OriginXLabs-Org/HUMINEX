@@ -1,0 +1,2 @@
+resources:
+  - ../../../infra/k8s/overlays/dev

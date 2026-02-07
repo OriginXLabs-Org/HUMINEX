@@ -1,0 +1,10 @@
+{
+  "Huminex.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/Users\/abhishekpanda\/Documents\/ORIGINX LABS PVT. LTD.\/Huminex\/Backend\/src\/Api\/Huminex.Api",
+  "Huminex.BuildingBlocks.Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/Users\/abhishekpanda\/Documents\/ORIGINX LABS PVT. LTD.\/Huminex\/Backend\/src\/BuildingBlocks.Application",
+  "Huminex.BuildingBlocks.Contracts, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/Users\/abhishekpanda\/Documents\/ORIGINX LABS PVT. LTD.\/Huminex\/Backend\/src\/BuildingBlocks.Contracts",
+  "Huminex.BuildingBlocks.Domain, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/Users\/abhishekpanda\/Documents\/ORIGINX LABS PVT. LTD.\/Huminex\/Backend\/src\/BuildingBlocks.Domain",
+  "Huminex.BuildingBlocks.Infrastructure, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/Users\/abhishekpanda\/Documents\/ORIGINX LABS PVT. LTD.\/Huminex\/Backend\/src\/BuildingBlocks.Infrastructure",
+  "Huminex.BuildingBlocks.Observability, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/Users\/abhishekpanda\/Documents\/ORIGINX LABS PVT. LTD.\/Huminex\/Backend\/src\/BuildingBlocks.Observability",
+  "Huminex.ModuleContracts, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/Users\/abhishekpanda\/Documents\/ORIGINX LABS PVT. LTD.\/Huminex\/Backend\/src\/ModuleContracts",
+  "Huminex.SharedKernel, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/Users\/abhishekpanda\/Documents\/ORIGINX LABS PVT. LTD.\/Huminex\/Backend\/src\/SharedKernel"
+}
