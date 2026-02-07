@@ -70,7 +70,7 @@ jobs:
           dotnet test Backend/tests/Integration/Huminex.Tests.Integration.csproj --configuration Release --no-restore
 
       - name: API Contract Checks
-        run: dotnet test Backend/tests/Architecture/Huminex.Tests.Architecture.csproj --configuration Release --no-build --filter "FullyQualifiedName~ApiContractTests"
+        run: dotnet test Backend/tests/Architecture/Huminex.Tests.Architecture.csproj --configuration Release --no-restore
 
       - name: Detect Sonar configuration
         id: sonar_check
