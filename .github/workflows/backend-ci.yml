@@ -47,8 +47,20 @@ jobs:
       - name: API Contract Checks
         run: dotnet test Backend/tests/Architecture/Huminex.Tests.Architecture.csproj --configuration Release --no-build --filter "FullyQualifiedName~ApiContractTests"
 
+      - name: Detect Sonar configuration
+        id: sonar_check
+        run: |
+          if [ -n "${SONAR_TOKEN}" ] && [ -n "${SONAR_HOST_URL}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
       - name: SonarQube Scan (Optional)
-        if: ${{ secrets.SONAR_TOKEN != '' && secrets.SONAR_HOST_URL != '' }}
+        if: steps.sonar_check.outputs.enabled == 'true'
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
