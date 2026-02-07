@@ -6,4 +6,5 @@ patches:
   - path: rollout-dev-patch.yaml
 images:
   - name: huminex.azurecr.io/huminex-api
+    newName: huminexdevacrohx5ka.azurecr.io/huminex-api
     newTag: latest

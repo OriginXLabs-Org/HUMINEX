@@ -19,6 +19,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: huminex
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d huminex"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout
@@ -38,6 +52,17 @@ jobs:
 
       - name: Build
         run: dotnet build Backend/src/Api/Huminex.Api/Huminex.Api.csproj --configuration Release --no-restore
+
+      - name: Wait for PostgreSQL service
+        run: |
+          for i in {1..30}; do
+            if (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "PostgreSQL service did not become ready in time."
+          exit 1
 
       - name: Test
         run: |

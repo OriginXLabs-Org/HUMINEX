@@ -14,7 +14,7 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       security-events: write
     env:
       IMAGE_REF: ${{ secrets.ACR_LOGIN_SERVER }}/huminex-api:${{ github.sha }}
@@ -64,3 +64,21 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-image.sarif
+
+      - name: Update GitOps image tag for Argo CD
+        run: |
+          FILE="infra/k8s/overlays/dev/kustomization.yaml"
+          sed -i.bak -E "s/(newTag:[[:space:]]*).*/\\1${GITHUB_SHA}/" "$FILE"
+          rm -f "${FILE}.bak"
+
+      - name: Commit and push GitOps tag update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- infra/k8s/overlays/dev/kustomization.yaml; then
+            echo "No GitOps tag change to commit."
+            exit 0
+          fi
+          git add infra/k8s/overlays/dev/kustomization.yaml
+          git commit -m "chore(cd): promote huminex-api image to ${GITHUB_SHA}"
+          git push origin HEAD:main

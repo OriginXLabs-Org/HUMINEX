@@ -6,9 +6,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/your-org/huminex-platform.git
+    repoURL: https://github.com/OriginXLabs-Org/HUMINEX.git
     targetRevision: main
-    path: k8s/overlays/dev
+    path: infra/k8s/overlays/dev
   destination:
     server: https://kubernetes.default.svc
     namespace: huminex
