@@ -7,6 +7,7 @@ using DotNet.Testcontainers.Containers;
 using Huminex.BuildingBlocks.Infrastructure.Persistence;
 using Huminex.BuildingBlocks.Infrastructure.Persistence.Entities;
 using Huminex.Tests.Integration.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Huminex.Tests.Integration;
@@ -233,12 +234,12 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         var tenantA = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var tenantB = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
-        if (!dbContext.Employees.Any(x => x.TenantId == tenantA))
+        if (!dbContext.Employees.IgnoreQueryFilters().Any(x => x.TenantId == tenantA && x.Email == "a-emp-001@gethuminex.com"))
         {
             dbContext.Employees.Add(new EmployeeEntity(tenantA, "A-EMP-001", "Tenant A Engineer", "a-emp-001@gethuminex.com", "engineer", "Engineering", null, null));
         }
 
-        if (!dbContext.Employees.Any(x => x.TenantId == tenantB))
+        if (!dbContext.Employees.IgnoreQueryFilters().Any(x => x.TenantId == tenantB && x.Email == "b-emp-001@gethuminex.com"))
         {
             dbContext.Employees.Add(new EmployeeEntity(tenantB, "B-EMP-001", "Tenant B Engineer", "b-emp-001@gethuminex.com", "engineer", "Engineering", null, null));
         }
