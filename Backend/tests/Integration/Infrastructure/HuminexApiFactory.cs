@@ -18,7 +18,8 @@ public sealed class HuminexApiFactory(string postgresConnectionString) : WebAppl
             {
                 ["Postgres:ConnectionString"] = postgresConnectionString,
                 ["Postgres:ApplyMigrationsOnStartup"] = "true",
-                ["DevSecurity:EnableHeaderIdentityFallback"] = "true"
+                ["DevSecurity:EnableHeaderIdentityFallback"] = "true",
+                ["ServiceBus:EventsTopicName"] = ""
             };
 
             configBuilder.AddInMemoryCollection(testOverrides);
