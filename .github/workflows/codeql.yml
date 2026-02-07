@@ -1,0 +1,66 @@
+name: HUMINEX CodeQL
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Backend/**'
+      - 'Frontend/**'
+      - '.github/workflows/codeql.yml'
+  pull_request:
+    paths:
+      - 'Backend/**'
+      - 'Frontend/**'
+      - '.github/workflows/codeql.yml'
+  schedule:
+    - cron: '30 2 * * 1'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+          - language: javascript-typescript
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Setup .NET
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build C# code
+        if: matrix.language == 'csharp'
+        run: |
+          dotnet restore Backend/src/Api/Huminex.Api/Huminex.Api.csproj
+          dotnet build Backend/src/Api/Huminex.Api/Huminex.Api.csproj --configuration Release --no-restore
+
+      - name: Setup Node
+        if: matrix.language == 'javascript-typescript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        if: matrix.language == 'javascript-typescript'
+        run: npm --prefix Frontend ci
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3

@@ -6,6 +6,7 @@
 - `.github/workflows/frontend-ci.yml`
 - `.github/workflows/e2e-playwright.yml`
 - `.github/workflows/infra-deploy.yml`
+- `.github/workflows/codeql.yml`
 
 ## Required GitHub Secrets
 ### Azure
@@ -16,9 +17,7 @@
 - `ACR_LOGIN_SERVER`
 
 ### Vercel
-- `VERCEL_TOKEN`
-- `VERCEL_ORG_ID`
-- `VERCEL_PROJECT_ID`
+- Not required in GitHub Actions (Vercel Git webhook handles deployment)
 
 ### Optional
 - `SONAR_TOKEN`
@@ -28,9 +27,10 @@
 1. Backend CI (restore/build/unit/integration/contracts)
 2. Frontend CI (unit/build)
 3. E2E Playwright (UI smoke + API smoke)
-4. Backend image push to ACR (main branch)
-5. Infra deploy (manual or main)
-6. Argo CD sync from `infra/argocd/*.yaml`
+4. CodeQL static analysis (C# + JS/TS)
+5. Backend image push to ACR (main branch) + Trivy image scan (SARIF)
+6. Infra deploy (manual or main)
+7. Argo CD sync from `infra/argocd/*.yaml`
 
 ## Local pre-push checks
 ```bash

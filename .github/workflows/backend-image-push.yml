@@ -15,6 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      security-events: write
+    env:
+      IMAGE_REF: ${{ secrets.ACR_LOGIN_SERVER }}/huminex-api:${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,16 +30,6 @@ jobs:
         with:
           creds: >-
             {"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ secrets.ACR_LOGIN_SERVER }}/huminex-api
-          tags: |
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Login to Azure Container Registry
         run: |
@@ -54,5 +47,20 @@ jobs:
           context: .
           file: Backend/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.IMAGE_REF }}
+            ${{ secrets.ACR_LOGIN_SERVER }}/huminex-api:latest
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_REF }}
+          format: sarif
+          output: trivy-image.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy image scan
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
