@@ -114,6 +114,14 @@ const permissions = [
 export const AdminRolesPermissions = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRole, setSelectedRole] = useState<number | null>(null);
+  void selectedRole;
+
+  const hasRolePermission = (role: typeof roles[number], permissionKey: string) => {
+    if (role.permissions.includes("all")) return true;
+    if (role.permissions.includes("view") && permissionKey.endsWith(".view")) return true;
+    const moduleKey = permissionKey.split(".")[0];
+    return role.permissions.includes(moduleKey);
+  };
 
   const filteredRoles = roles.filter(role =>
     role.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -284,7 +292,7 @@ export const AdminRolesPermissions = () => {
                               <div key={role.id} className="flex flex-col items-center gap-1">
                                 <span className="text-[10px] text-muted-foreground">{role.name.split(' ')[0]}</span>
                                 <Switch 
-                                  defaultChecked={role.permissions.includes('all') || Math.random() > 0.3}
+                                  defaultChecked={hasRolePermission(role, permission.key)}
                                   disabled={role.isSystem && role.name === "Super Admin"}
                                 />
                               </div>

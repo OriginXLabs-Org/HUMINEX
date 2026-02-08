@@ -1,133 +1,85 @@
-import React, { useState, useEffect } from "react";
-import { Bell, Check, Trash2, Settings, ExternalLink } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Bell, Check, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { platformClient as platform } from "@/integrations/platform/client";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { huminexApi } from "@/integrations/api/client";
+
+type NotificationType = "info" | "warning" | "security" | "success";
 
 interface Notification {
   id: string;
   title: string;
   message: string;
-  notification_type: string;
+  notification_type: NotificationType;
   is_read: boolean;
   created_at: string;
 }
 
 export const AdminNotificationBell: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const fetchNotifications = async () => {
     try {
-      const { data, error } = await platform
-        .from("admin_notifications")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const logs = await huminexApi.getInternalSystemLogs("all", 20);
+      const mapped = logs.map((log) => {
+        const type: NotificationType = log.level === "error"
+          ? "security"
+          : log.level === "warning"
+            ? "warning"
+            : "info";
 
-      if (error) throw error;
-      setNotifications(data || []);
+        return {
+          id: log.id,
+          title: log.source || "System Event",
+          message: log.message,
+          notification_type: type,
+          is_read: false,
+          created_at: log.createdAtUtc,
+        };
+      });
+      setNotifications(mapped);
     } catch (err) {
       console.error("Error fetching notifications:", err);
-      // Use mock data for demo
-      setNotifications([
-        {
-          id: "1",
-          title: "New Client Onboarded",
-          message: "TechCorp Inc has completed onboarding",
-          notification_type: "info",
-          is_read: false,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: "2",
-          title: "Invoice Paid",
-          message: "Invoice #INV-2024-0045 has been paid",
-          notification_type: "success",
-          is_read: false,
-          created_at: new Date(Date.now() - 3600000).toISOString()
-        },
-        {
-          id: "3",
-          title: "Security Alert",
-          message: "Multiple failed login attempts detected",
-          notification_type: "security",
-          is_read: true,
-          created_at: new Date(Date.now() - 7200000).toISOString()
-        }
-      ]);
-    } finally {
-      setLoading(false);
+      setNotifications([]);
     }
   };
 
   useEffect(() => {
-    fetchNotifications();
-
-    // Subscribe to realtime notifications
-    const channel = platform
-      .channel("admin-notifications-bell")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "admin_notifications",
-        },
-        (payload) => {
-          setNotifications((prev) => [payload.new as Notification, ...prev.slice(0, 9)]);
-        }
-      )
-      .subscribe();
+    void fetchNotifications();
+    const interval = window.setInterval(() => {
+      void fetchNotifications();
+    }, 15000);
 
     return () => {
-      platform.removeChannel(channel);
+      window.clearInterval(interval);
     };
   }, []);
 
-  const markAsRead = async (id: string) => {
-    try {
-      await platform
-        .from("admin_notifications")
-        .update({ is_read: true })
-        .eq("id", id);
-      
-      setNotifications(notifications.map(n => 
-        n.id === id ? { ...n, is_read: true } : n
-      ));
-    } catch (err) {
-      console.error("Error marking as read:", err);
-    }
+  const markAsRead = (id: string) => {
+    setNotifications((prev) => prev.map((notification) =>
+      notification.id === id ? { ...notification, is_read: true } : notification
+    ));
   };
 
-  const markAllAsRead = async () => {
-    try {
-      const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
-      if (unreadIds.length > 0) {
-        await platform
-          .from("admin_notifications")
-          .update({ is_read: true })
-          .in("id", unreadIds);
-      }
-      setNotifications(notifications.map(n => ({ ...n, is_read: true })));
-    } catch (err) {
-      console.error("Error marking all as read:", err);
-    }
+  const markAllAsRead = () => {
+    setNotifications((prev) => prev.map((notification) => ({ ...notification, is_read: true })));
   };
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.is_read).length,
+    [notifications]
+  );
 
-  const getTypeColor = (type: string) => {
+  const getTypeColor = (type: NotificationType) => {
     switch (type) {
       case "success": return "bg-green-500";
       case "security": return "bg-red-500";
@@ -156,7 +108,7 @@ export const AdminNotificationBell: React.FC = () => {
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
-            <Badge 
+            <Badge
               className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-[10px] bg-destructive text-destructive-foreground"
             >
               {unreadCount > 9 ? "9+" : unreadCount}
@@ -168,9 +120,9 @@ export const AdminNotificationBell: React.FC = () => {
         <div className="flex items-center justify-between px-3 py-2 border-b">
           <span className="font-semibold text-sm">Notifications</span>
           {unreadCount > 0 && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               className="h-7 text-xs"
               onClick={markAllAsRead}
             >

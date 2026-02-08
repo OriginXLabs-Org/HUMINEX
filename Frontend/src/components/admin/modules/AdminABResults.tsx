@@ -169,19 +169,31 @@ export const AdminABResults = () => {
     Math.min(...variantStats.map((v: any) => v.visitors))
   );
 
-  // Generate time series data (mock for now - would need additional table)
+  // Build daily conversion trend from assignment timestamps (real data only)
   const daysRunning = experiment.start_date 
     ? differenceInDays(new Date(), new Date(experiment.start_date))
     : 0;
 
-  const timeSeriesData = Array.from({ length: Math.min(daysRunning, 14) || 7 }, (_, i) => {
-    const day = i + 1;
+  const lookbackDays = Math.min(Math.max(daysRunning, 7), 14);
+  const timeSeriesData = Array.from({ length: lookbackDays }, (_, i) => {
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    dayStart.setDate(dayStart.getDate() - (lookbackDays - 1 - i));
+
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
     return {
-      day: `Day ${day}`,
-      ...variantStats.reduce((acc: any, v: any) => ({
-        ...acc,
-        [v.name]: Math.max(0, v.conversionRate + (Math.random() - 0.5) * 2),
-      }), {}),
+      day: `Day ${i + 1}`,
+      ...variantStats.reduce((acc: any, v: any) => {
+        const dailyAssignments = assignments.filter((a: any) => {
+          const createdAt = new Date(a.created_at || a.updated_at || experiment.created_at);
+          return a.variant_id === v.id && createdAt >= dayStart && createdAt < dayEnd;
+        });
+        const conversions = dailyAssignments.filter((a: any) => a.converted).length;
+        const rate = dailyAssignments.length > 0 ? (conversions / dailyAssignments.length) * 100 : 0;
+        return { ...acc, [v.name]: Number(rate.toFixed(2)) };
+      }, {}),
     };
   });
 
