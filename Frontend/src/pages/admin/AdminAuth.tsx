@@ -78,7 +78,7 @@ const AdminAuth = () => {
         const sessionEmail = (session.user.email || "").toLowerCase();
         if (sessionEmail !== INTERNAL_ADMIN_EMAIL || !hasStrongEntraVerification(session.user.user_metadata)) {
           await captureAdminAudit("blocked", "session_failed_internal_checks");
-          await platform.auth.signOut();
+          await platform.auth.clearLocalSession();
           return;
         }
 
@@ -90,7 +90,7 @@ const AdminAuth = () => {
           navigate("/admin", { replace: true });
         } else {
           await captureAdminAudit("blocked", "session_role_or_profile_mismatch");
-          await platform.auth.signOut();
+          await platform.auth.clearLocalSession();
         }
       } catch {
         // Ignore and stay on login page.
@@ -139,14 +139,14 @@ const AdminAuth = () => {
       const signedInEmail = (data?.user?.email ?? "").toLowerCase();
       if (signedInEmail !== INTERNAL_ADMIN_EMAIL) {
         await captureAdminAudit("blocked", "signed_in_email_not_internal");
-        await platform.auth.signOut();
+        await platform.auth.clearLocalSession();
         toast.error("Access denied. This portal is restricted to HUMINEX internal admin identity.");
         return;
       }
 
       if (!hasStrongEntraVerification(data?.user?.user_metadata)) {
         await captureAdminAudit("blocked", "mfa_or_passkey_missing");
-        await platform.auth.signOut();
+        await platform.auth.clearLocalSession();
         toast.error("Access denied. Azure Authenticator/Passkey (MFA) verification is required for Admin access.");
         return;
       }
@@ -157,14 +157,14 @@ const AdminAuth = () => {
         const profileEmail = (me.email || "").toLowerCase();
         if (profileEmail !== INTERNAL_ADMIN_EMAIL) {
           await captureAdminAudit("blocked", "profile_email_mismatch");
-          await platform.auth.signOut();
+          await platform.auth.clearLocalSession();
           toast.error("Access denied. Internal admin profile verification failed.");
           return;
         }
 
         if (!ADMIN_ROLES.has(role)) {
           await captureAdminAudit("blocked", "missing_admin_role");
-          await platform.auth.signOut();
+          await platform.auth.clearLocalSession();
           toast.error("Access denied. Azure admin role privileges are required.");
           return;
         }

@@ -333,15 +333,20 @@ const auth = {
       error: new Error("Self-service sign-up is disabled. Submit onboarding and wait for Entra invite/role assignment."),
     };
   },
-  async signOut() {
-    try {
-      await logoutMicrosoft();
-    } catch {
-      // Ignore popup cancel errors.
+  async signOut(options?: { global?: boolean }) {
+    if (options?.global !== false) {
+      try {
+        await logoutMicrosoft();
+      } catch {
+        // Ignore popup cancel errors.
+      }
     }
     saveStoredSession(null);
     notify("SIGNED_OUT", null);
     return { error: null };
+  },
+  async clearLocalSession() {
+    return auth.signOut({ global: false });
   },
   async enableLocalInternalAdminBypassSession() {
     if (!LOCAL_BYPASS_ENABLED) {
