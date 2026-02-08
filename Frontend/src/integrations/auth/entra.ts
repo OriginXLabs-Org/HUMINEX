@@ -163,6 +163,9 @@ export async function getMsalInstance(): Promise<PublicClientApplication> {
       const redirectResult = await msal.handleRedirectPromise();
       if (redirectResult?.account) {
         msal.setActiveAccount(redirectResult.account);
+      } else if (hasAnyInteractionInProgress()) {
+        // Recover from stale interaction flags left in storage after interrupted redirects.
+        clearAnyInteractionInProgress();
       }
     } catch {
       // Best-effort recovery from stale state.
@@ -220,6 +223,13 @@ export async function loginWithMicrosoft(
     redirectUri: options?.redirectUri ?? resolveRedirectUri(portal),
     ...(loginHint ? { loginHint } : {}),
   };
+
+    // Avoid false positives from stale MSAL interaction state on refresh/retry.
+    const settled = await waitForInteractionToSettle(1500);
+    if (!settled) {
+      clearAnyInteractionInProgress();
+      await sleep(200);
+    }
     let authResult: AuthenticationResult;
 
     try {

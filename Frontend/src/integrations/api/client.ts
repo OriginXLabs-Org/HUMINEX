@@ -78,6 +78,10 @@ export type InternalAdminSummaryResponse = {
   employerTenants: number;
   employerAdmins: number;
   totalEmployees: number;
+  totalQuotes: number;
+  pendingQuotes: number;
+  totalInvoices: number;
+  totalRevenue: number;
   auditEventsLast24Hours: number;
   lastAuditAtUtc?: string | null;
 };

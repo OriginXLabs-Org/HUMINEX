@@ -38,10 +38,10 @@ export const useAdminStats = () => {
       const summary = await huminexApi.getInternalAdminSummary();
 
       return {
-        totalQuotes: summary.auditEventsLast24Hours || 0,
-        pendingQuotes: 0,
-        totalInvoices: 0,
-        totalRevenue: 0,
+        totalQuotes: summary.totalQuotes || 0,
+        pendingQuotes: summary.pendingQuotes || 0,
+        totalInvoices: summary.totalInvoices || 0,
+        totalRevenue: summary.totalRevenue || 0,
         totalUsers: summary.employerAdmins || 0,
         totalInquiries: 0,
         pendingOnboarding: 0,

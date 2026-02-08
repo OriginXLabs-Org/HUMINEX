@@ -1,6 +1,7 @@
 name: HUMINEX E2E Playwright
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
     paths:

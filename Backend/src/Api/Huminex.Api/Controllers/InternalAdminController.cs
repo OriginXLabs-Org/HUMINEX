@@ -52,6 +52,13 @@ public sealed class InternalAdminController(
         ).Distinct().CountAsync(cancellationToken);
 
         var totalEmployees = await dbContext.Employees.IgnoreQueryFilters().CountAsync(cancellationToken);
+        var totalQuotes = await dbContext.Quotes.IgnoreQueryFilters().CountAsync(cancellationToken);
+        var pendingQuotes = await dbContext.Quotes.IgnoreQueryFilters().CountAsync(x => x.Status == "pending", cancellationToken);
+        var totalInvoices = await dbContext.Invoices.IgnoreQueryFilters().CountAsync(cancellationToken);
+        var totalRevenue = await dbContext.Invoices
+            .IgnoreQueryFilters()
+            .Where(x => x.Status == "paid" || x.Status == "sent")
+            .SumAsync(x => (decimal?)x.TotalAmount, cancellationToken) ?? 0m;
 
         var auditEventsLast24h = await dbContext.AuditTrails
             .IgnoreQueryFilters()
@@ -68,6 +75,10 @@ public sealed class InternalAdminController(
             employerTenants,
             employerAdminCount,
             totalEmployees,
+            totalQuotes,
+            pendingQuotes,
+            totalInvoices,
+            totalRevenue,
             auditEventsLast24h,
             lastAuditAtUtc);
 
@@ -1196,6 +1207,10 @@ public sealed record InternalAdminSummaryResponse(
     int EmployerTenants,
     int EmployerAdmins,
     int TotalEmployees,
+    int TotalQuotes,
+    int PendingQuotes,
+    int TotalInvoices,
+    decimal TotalRevenue,
     int AuditEventsLast24Hours,
     DateTime? LastAuditAtUtc);
 

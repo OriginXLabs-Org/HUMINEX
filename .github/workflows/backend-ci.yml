@@ -1,6 +1,7 @@
 name: HUMINEX Backend CI
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'Backend/**'
