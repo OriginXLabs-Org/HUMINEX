@@ -45,7 +45,9 @@ Before applying:
 Apply ingress:
 
 ```bash
+kubectl apply -f infra/argocd/argocd-cmd-params-cm.yaml
 kubectl apply -f infra/argocd/argocd-server-ingress.yaml
+kubectl -n argocd rollout restart deployment argocd-server
 ```
 
 Live URL:
