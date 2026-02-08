@@ -8,4 +8,4 @@ patches:
 images:
   - name: huminex.azurecr.io/huminex-api
     newName: huminexdevacrohx5ka.azurecr.io/huminex-api
-    newTag: 10c3dca824852563da39b559a42174f9756d6d4f
+    newTag: 0c2b84e9b6db3d164d815e21f658782805fc66bb
