@@ -1,112 +1,132 @@
-import { useState, useEffect } from 'react';
-import { platformClient as platform } from '@/integrations/platform/client';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  CreditCard, 
-  TrendingUp, 
-  TrendingDown,
-  DollarSign, 
+import { useEffect, useMemo, useState } from "react";
+import { huminexApi, type InternalAdminInvoiceResponse, type InternalAdminTenantBillingItemResponse } from "@/integrations/api/client";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  CreditCard,
+  TrendingUp,
+  DollarSign,
   Calendar,
   Search,
   Download,
   RefreshCw,
-  ArrowUpRight,
   AlertCircle,
   CheckCircle2,
   Clock,
-  Building2
-} from 'lucide-react';
-
-interface BillingData {
-  id: string;
-  tenant_name: string;
-  plan: string;
-  status: string;
-  mrr: number;
-  next_billing: string;
-  payment_method: string;
-}
+  Building2,
+} from "lucide-react";
+import { toast } from "sonner";
 
 export const AdminTenantBilling = () => {
-  const [billingData, setBillingData] = useState<BillingData[]>([]);
+  const [billingData, setBillingData] = useState<InternalAdminTenantBillingItemResponse[]>([]);
+  const [invoices, setInvoices] = useState<InternalAdminInvoiceResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [stats, setStats] = useState({
     totalMRR: 0,
     totalARR: 0,
     activeSubs: 0,
     trialAccounts: 0,
-    churned: 0,
-    pastDue: 0
+    pastDue: 0,
+    outstanding: 0,
   });
-
-  useEffect(() => {
-    fetchBillingData();
-  }, []);
 
   const fetchBillingData = async () => {
     setLoading(true);
     try {
-      const { data: tenants } = await platform
-        .from('client_tenants')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [billing, recentInvoices] = await Promise.all([
+        huminexApi.getInternalTenantBilling(500),
+        huminexApi.getInternalInvoices(50, "all"),
+      ]);
 
-      // Mock billing data based on tenants
-      const mockBilling: BillingData[] = (tenants || []).map((tenant) => ({
-        id: tenant.id,
-        tenant_name: tenant.name,
-        plan: tenant.tenant_type === 'enterprise' ? 'Enterprise' : tenant.tenant_type === 'business' ? 'Growth' : 'Startup',
-        status: tenant.status === 'active' ? 'active' : tenant.status === 'pending' ? 'trial' : 'past_due',
-        mrr: tenant.tenant_type === 'enterprise' ? 499 : tenant.tenant_type === 'business' ? 349 : 199,
-        next_billing: new Date(Date.now() + Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-        payment_method: Math.random() > 0.3 ? 'Card' : 'Invoice'
-      }));
-
-      setBillingData(mockBilling);
-      
-      // Calculate stats
-      const totalMRR = mockBilling.reduce((acc, b) => b.status === 'active' ? acc + b.mrr : acc, 0);
+      setBillingData(billing.items || []);
+      setInvoices(recentInvoices || []);
       setStats({
-        totalMRR,
-        totalARR: totalMRR * 12,
-        activeSubs: mockBilling.filter(b => b.status === 'active').length,
-        trialAccounts: mockBilling.filter(b => b.status === 'trial').length,
-        churned: Math.floor(mockBilling.length * 0.05),
-        pastDue: mockBilling.filter(b => b.status === 'past_due').length
+        totalMRR: Number(billing.totalMrr || 0),
+        totalARR: Number(billing.totalArr || 0),
+        activeSubs: billing.activeSubscriptions || 0,
+        trialAccounts: billing.trialAccounts || 0,
+        pastDue: billing.pastDueAccounts || 0,
+        outstanding: (billing.items || []).reduce((sum, item) => sum + Number(item.outstandingAmount || 0), 0),
       });
     } catch (error) {
-      console.error('Error fetching billing data:', error);
+      console.error("Error fetching billing data:", error);
+      toast.error("Failed to load tenant billing");
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredData = billingData.filter(b => 
-    b.tenant_name.toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    fetchBillingData();
+  }, []);
+
+  const filteredData = useMemo(
+    () =>
+      billingData.filter((b) =>
+        `${b.tenantName} ${b.plan} ${b.status}`.toLowerCase().includes(searchTerm.trim().toLowerCase())
+      ),
+    [billingData, searchTerm]
   );
 
   const statusColors: Record<string, string> = {
-    active: 'bg-green-500/10 text-green-500 border-green-500/20',
-    trial: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-    past_due: 'bg-red-500/10 text-red-500 border-red-500/20',
-    cancelled: 'bg-gray-500/10 text-gray-500 border-gray-500/20'
+    active: "bg-green-500/10 text-green-500 border-green-500/20",
+    trial: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    past_due: "bg-red-500/10 text-red-500 border-red-500/20",
+    cancelled: "bg-gray-500/10 text-gray-500 border-gray-500/20",
   };
 
   const planColors: Record<string, string> = {
-    Enterprise: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-    Growth: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-    Startup: 'bg-gray-500/10 text-gray-500 border-gray-500/20'
+    enterprise: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+    growth: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    startup: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  };
+
+  const exportBillingCsv = () => {
+    const rows = [
+      [
+        "tenant",
+        "plan",
+        "status",
+        "mrr",
+        "next_billing",
+        "total_invoiced",
+        "total_paid",
+        "outstanding",
+        "overdue",
+      ],
+      ...filteredData.map((item) => [
+        item.tenantName,
+        item.plan,
+        item.status,
+        String(item.mrr),
+        item.nextBillingAtUtc,
+        String(item.totalInvoiced),
+        String(item.totalPaid),
+        String(item.outstandingAmount),
+        String(item.overdueAmount),
+      ]),
+    ];
+
+    const csv = rows
+      .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `tenant-billing-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="p-3 rounded-xl bg-primary/10">
@@ -114,7 +134,7 @@ export const AdminTenantBilling = () => {
           </div>
           <div>
             <h1 className="text-2xl font-heading font-bold text-foreground">Tenant Billing</h1>
-            <p className="text-muted-foreground">Manage subscriptions, plans, and billing</p>
+            <p className="text-muted-foreground">Real billing data across all employer tenants</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -122,14 +142,13 @@ export const AdminTenantBilling = () => {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={exportBillingCsv} disabled={filteredData.length === 0}>
             <Download className="w-4 h-4 mr-2" />
-            Export
+            Export CSV
           </Button>
         </div>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card className="bg-gradient-to-br from-green-500/10 to-transparent border-green-500/20">
           <CardContent className="p-4">
@@ -138,9 +157,6 @@ export const AdminTenantBilling = () => {
               <span className="text-xs font-medium">MRR</span>
             </div>
             <p className="text-2xl font-bold text-foreground">₹{stats.totalMRR.toLocaleString()}</p>
-            <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
-              <TrendingUp className="w-3 h-3" /> +12.5%
-            </p>
           </CardContent>
         </Card>
 
@@ -150,8 +166,7 @@ export const AdminTenantBilling = () => {
               <TrendingUp className="w-4 h-4" />
               <span className="text-xs font-medium">ARR</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">₹{(stats.totalARR / 1000).toFixed(0)}K</p>
-            <p className="text-xs text-muted-foreground mt-1">Annual Revenue</p>
+            <p className="text-2xl font-bold text-foreground">₹{stats.totalARR.toLocaleString()}</p>
           </CardContent>
         </Card>
 
@@ -173,7 +188,6 @@ export const AdminTenantBilling = () => {
               <span className="text-xs font-medium">Trials</span>
             </div>
             <p className="text-2xl font-bold text-foreground">{stats.trialAccounts}</p>
-            <p className="text-xs text-muted-foreground mt-1">Active Trials</p>
           </CardContent>
         </Card>
 
@@ -184,32 +198,27 @@ export const AdminTenantBilling = () => {
               <span className="text-xs font-medium">Past Due</span>
             </div>
             <p className="text-2xl font-bold text-foreground">{stats.pastDue}</p>
-            <p className="text-xs text-muted-foreground mt-1">Overdue</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-red-500/10 to-transparent border-red-500/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-red-500 mb-2">
-              <TrendingDown className="w-4 h-4" />
-              <span className="text-xs font-medium">Churned</span>
+              <DollarSign className="w-4 h-4" />
+              <span className="text-xs font-medium">Outstanding</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">{stats.churned}</p>
-            <p className="text-xs text-muted-foreground mt-1">This Month</p>
+            <p className="text-2xl font-bold text-foreground">₹{stats.outstanding.toLocaleString()}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabs */}
       <Tabs defaultValue="subscriptions" className="space-y-4">
         <TabsList>
           <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
-          <TabsTrigger value="plans">Plans & Pricing</TabsTrigger>
         </TabsList>
 
         <TabsContent value="subscriptions" className="space-y-4">
-          {/* Search */}
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -220,7 +229,6 @@ export const AdminTenantBilling = () => {
             />
           </div>
 
-          {/* Table */}
           <Card>
             <CardContent className="p-0">
               {loading ? (
@@ -236,44 +244,36 @@ export const AdminTenantBilling = () => {
                       <TableHead>Status</TableHead>
                       <TableHead>MRR</TableHead>
                       <TableHead>Next Billing</TableHead>
-                      <TableHead>Payment</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead>Outstanding</TableHead>
+                      <TableHead className="text-right">Invoices</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredData.map((billing) => (
-                      <TableRow key={billing.id}>
+                      <TableRow key={billing.tenantId}>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                               <Building2 className="w-4 h-4 text-primary" />
                             </div>
-                            <span className="font-medium">{billing.tenant_name}</span>
+                            <span className="font-medium">{billing.tenantName}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge className={planColors[billing.plan]}>
-                            {billing.plan}
-                          </Badge>
+                          <Badge className={planColors[billing.plan] || planColors.startup}>{billing.plan}</Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge className={statusColors[billing.status]}>
-                            {billing.status}
-                          </Badge>
+                          <Badge className={statusColors[billing.status] || statusColors.active}>{billing.status}</Badge>
                         </TableCell>
-                        <TableCell className="font-medium">₹{billing.mrr}</TableCell>
+                        <TableCell className="font-medium">₹{Number(billing.mrr).toLocaleString()}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1 text-sm">
                             <Calendar className="w-3 h-3 text-muted-foreground" />
-                            {new Date(billing.next_billing).toLocaleDateString()}
+                            {new Date(billing.nextBillingAtUtc).toLocaleDateString()}
                           </div>
                         </TableCell>
-                        <TableCell>{billing.payment_method}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm">
-                            <ArrowUpRight className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
+                        <TableCell className="font-medium">₹{Number(billing.outstandingAmount).toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{billing.invoiceCount}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -287,34 +287,29 @@ export const AdminTenantBilling = () => {
           <Card>
             <CardHeader>
               <CardTitle>Recent Invoices</CardTitle>
-              <CardDescription>All generated invoices across tenants</CardDescription>
+              <CardDescription>Latest invoices from backend internal-admin API</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground text-center py-8">Invoice history will be displayed here</p>
+            <CardContent className="space-y-3">
+              {invoices.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No invoice records available</p>
+              ) : (
+                invoices.slice(0, 15).map((invoice) => (
+                  <div key={invoice.id} className="flex items-center justify-between rounded-lg border p-3">
+                    <div>
+                      <p className="font-mono text-sm font-medium">{invoice.invoiceNumber}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {invoice.contactName || "Unknown"} • {invoice.contactEmail || "No email"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">₹{Number(invoice.totalAmount).toLocaleString()}</p>
+                      <Badge className={statusColors[invoice.status] || statusColors.draft}>{invoice.status}</Badge>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="plans">
-          <div className="grid md:grid-cols-3 gap-6">
-            {['Startup', 'Growth', 'Enterprise'].map((plan) => (
-              <Card key={plan} className={plan === 'Growth' ? 'border-primary shadow-lg shadow-primary/10' : ''}>
-                <CardHeader>
-                  <CardTitle>{plan}</CardTitle>
-                  <CardDescription>
-                    {plan === 'Startup' && '₹199/employee/mo • 5-50 employees'}
-                    {plan === 'Growth' && '₹349/employee/mo • 50-300 employees'}
-                    {plan === 'Enterprise' && '₹499+/employee/mo • 300+ employees'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant={plan === 'Growth' ? 'default' : 'outline'} className="w-full">
-                    Edit Plan
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         </TabsContent>
       </Tabs>
     </div>

@@ -1,18 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { platformClient as platform } from "@/integrations/platform/client";
+import { huminexApi, type InternalAdminInvoiceResponse } from "@/integrations/api/client";
 import { toast } from "sonner";
-import { 
-  Eye, Loader2, Download, Receipt, CreditCard, TrendingUp, 
-  Clock, CheckCircle, XCircle, AlertCircle, Search, RefreshCw,
-  Calendar, DollarSign, ArrowUpRight, ArrowDownRight, Filter,
-  Globe, User, FileDown, History
+import {
+  Eye,
+  Loader2,
+  Receipt,
+  TrendingUp,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Search,
+  RefreshCw,
+  DollarSign,
+  Filter,
 } from "lucide-react";
 
 const statusColors: Record<string, string> = {
@@ -26,7 +33,7 @@ const statusColors: Record<string, string> = {
 
 const statusIcons: Record<string, React.ReactNode> = {
   draft: <Clock className="h-3 w-3" />,
-  sent: <ArrowUpRight className="h-3 w-3" />,
+  sent: <TrendingUp className="h-3 w-3" />,
   paid: <CheckCircle className="h-3 w-3" />,
   overdue: <AlertCircle className="h-3 w-3" />,
   cancelled: <XCircle className="h-3 w-3" />,
@@ -34,30 +41,21 @@ const statusIcons: Record<string, React.ReactNode> = {
 };
 
 export const AdminInvoices = () => {
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<InternalAdminInvoiceResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<InternalAdminInvoiceResponse | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [downloadLoading, setDownloadLoading] = useState(false);
-  const [checkingOverdue, setCheckingOverdue] = useState(false);
-  const [invoiceDownloads, setInvoiceDownloads] = useState<any[]>([]);
-  const [loadingDownloads, setLoadingDownloads] = useState(false);
 
   const fetchInvoices = async () => {
     try {
-      const { data, error } = await platform
-        .from('invoices')
-        .select('*, quotes(quote_number, contact_name, contact_email)')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await huminexApi.getInternalInvoices(500, "all");
       setInvoices(data || []);
     } catch (error) {
-      console.error('Error fetching invoices:', error);
-      toast.error('Failed to load invoices');
+      console.error("Error fetching invoices:", error);
+      toast.error("Failed to load invoices");
     } finally {
       setLoading(false);
     }
@@ -65,90 +63,65 @@ export const AdminInvoices = () => {
 
   useEffect(() => {
     fetchInvoices();
-
-    // Set up realtime subscription
-    const channel = platform
-      .channel('invoices-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'invoices' },
-        () => {
-          fetchInvoices();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      platform.removeChannel(channel);
-    };
   }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await fetchInvoices();
     setIsRefreshing(false);
-    toast.success('Data refreshed');
+    toast.success("Data refreshed");
   };
 
-  const updateInvoiceStatus = async (invoiceId: string, status: string) => {
+  const updateInvoiceStatus = async (
+    invoiceId: string,
+    status: "draft" | "sent" | "paid" | "overdue" | "cancelled" | "failed"
+  ) => {
     setActionLoading(true);
     try {
-      const updateData: any = { 
-        status, 
-        updated_at: new Date().toISOString() 
-      };
-      
-      if (status === 'paid') {
-        updateData.paid_at = new Date().toISOString();
-      }
-
-      const { error } = await platform
-        .from('invoices')
-        .update(updateData)
-        .eq('id', invoiceId);
-
-      if (error) throw error;
+      const updated = await huminexApi.updateInternalInvoiceStatus(invoiceId, status);
+      setInvoices((prev) => prev.map((invoice) => (invoice.id === invoiceId ? updated : invoice)));
+      setSelectedInvoice(updated);
       toast.success(`Invoice marked as ${status}`);
-      fetchInvoices();
-      setSelectedInvoice(null);
     } catch (error) {
-      console.error('Error updating invoice:', error);
-      toast.error('Failed to update invoice');
+      console.error("Error updating invoice:", error);
+      toast.error("Failed to update invoice");
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Calculate stats
-  const stats = {
-    total: invoices.length,
-    paid: invoices.filter(i => i.status === 'paid').length,
-    pending: invoices.filter(i => ['draft', 'sent'].includes(i.status)).length,
-    overdue: invoices.filter(i => i.status === 'overdue').length,
-    totalRevenue: invoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + Number(i.total_amount || 0), 0),
-    pendingAmount: invoices.filter(i => ['draft', 'sent'].includes(i.status)).reduce((sum, i) => sum + Number(i.total_amount || 0), 0),
-  };
+  const filteredInvoices = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
 
-  // Filter invoices
-  const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = 
-      invoice.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.quotes?.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.quotes?.contact_email?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+    return invoices.filter((invoice) => {
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        invoice.invoiceNumber.toLowerCase().includes(normalizedSearch) ||
+        invoice.quoteNumber.toLowerCase().includes(normalizedSearch) ||
+        invoice.contactName.toLowerCase().includes(normalizedSearch) ||
+        invoice.contactEmail.toLowerCase().includes(normalizedSearch) ||
+        invoice.contactCompany.toLowerCase().includes(normalizedSearch);
 
-  // Parse notes JSON for payment details
-  const parseNotes = (notes: string | null) => {
-    if (!notes) return null;
-    try {
-      return JSON.parse(notes);
-    } catch {
-      return null;
-    }
-  };
+      const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [invoices, searchQuery, statusFilter]);
+
+  const stats = useMemo(
+    () => ({
+      total: filteredInvoices.length,
+      paid: filteredInvoices.filter((i) => i.status === "paid").length,
+      pending: filteredInvoices.filter((i) => ["draft", "sent"].includes(i.status)).length,
+      overdue: filteredInvoices.filter((i) => i.status === "overdue").length,
+      totalRevenue: filteredInvoices
+        .filter((i) => i.status === "paid")
+        .reduce((sum, i) => sum + Number(i.totalAmount || 0), 0),
+      pendingAmount: filteredInvoices
+        .filter((i) => ["draft", "sent", "overdue"].includes(i.status))
+        .reduce((sum, i) => sum + Number(i.totalAmount || 0), 0),
+    }),
+    [filteredInvoices]
+  );
 
   if (loading) {
     return (
@@ -162,43 +135,17 @@ export const AdminInvoices = () => {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
-            Invoices & Payments
-          </h1>
-          <p className="text-muted-foreground">
-            Track invoices, payment statuses, and transaction history
-          </p>
+          <h1 className="text-3xl font-heading font-bold text-foreground mb-2">Invoices & Payments</h1>
+          <p className="text-muted-foreground">Track invoices, payment statuses, and billing details</p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            onClick={async () => {
-              setCheckingOverdue(true);
-              try {
-                const { data, error } = await platform.functions.invoke('check-overdue-invoices');
-                if (error) throw error;
-                toast.success(`Checked ${data.total_checked} invoices. ${data.marked_overdue} marked overdue, ${data.reminders_sent} reminders sent.`);
-                fetchInvoices();
-              } catch (err) {
-                toast.error('Failed to check overdue invoices');
-              } finally {
-                setCheckingOverdue(false);
-              }
-            }} 
-            disabled={checkingOverdue} 
-            variant="outline"
-            className="text-amber-600 border-amber-200 hover:bg-amber-50"
-          >
-            {checkingOverdue ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <AlertCircle className="h-4 w-4 mr-2" />}
-            Check Overdue
-          </Button>
           <Button onClick={handleRefresh} disabled={isRefreshing} variant="outline">
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         <Card className="bg-gradient-to-br from-card to-muted/30">
           <CardContent className="p-4">
@@ -263,10 +210,8 @@ export const AdminInvoices = () => {
                 <TrendingUp className="h-5 w-5 text-emerald-600" />
               </div>
               <div>
-                <p className="text-lg font-bold text-emerald-600">
-                  ₹{stats.totalRevenue.toLocaleString()}
-                </p>
-                <p className="text-xs text-muted-foreground">Revenue</p>
+                <p className="text-lg font-bold text-emerald-600">₹{stats.totalRevenue.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Collected</p>
               </div>
             </div>
           </CardContent>
@@ -279,22 +224,19 @@ export const AdminInvoices = () => {
                 <DollarSign className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-lg font-bold text-amber-600">
-                  ₹{stats.pendingAmount.toLocaleString()}
-                </p>
-                <p className="text-xs text-muted-foreground">Pending</p>
+                <p className="text-lg font-bold text-amber-600">₹{stats.pendingAmount.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Outstanding</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col md:flex-row gap-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by invoice #, name, or email..."
+            placeholder="Search by invoice #, quote #, name, or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -317,32 +259,22 @@ export const AdminInvoices = () => {
         </Select>
       </div>
 
-      {/* Invoices Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5 text-primary" />
             All Invoices
-            <Badge variant="secondary" className="ml-2">{filteredInvoices.length}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {filteredInvoices.length}
+            </Badge>
           </CardTitle>
-          <CardDescription>
-            Complete list of all invoices with payment tracking
-          </CardDescription>
+          <CardDescription>Internal admin invoice records from backend</CardDescription>
         </CardHeader>
         <CardContent>
           {filteredInvoices.length === 0 ? (
             <div className="text-center py-12">
               <Receipt className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
               <p className="text-muted-foreground">No invoices found</p>
-              {searchQuery && (
-                <Button 
-                  variant="link" 
-                  onClick={() => setSearchQuery("")}
-                  className="mt-2"
-                >
-                  Clear search
-                </Button>
-              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -350,96 +282,53 @@ export const AdminInvoices = () => {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Invoice #</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Plan/Service</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Quote</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Contact</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Amount</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Payment</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Due Date</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredInvoices.map((invoice) => {
-                    const notes = parseNotes(invoice.notes);
-                    return (
-                      <tr key={invoice.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                        <td className="py-3 px-4">
-                          <p className="font-mono font-medium text-sm">{invoice.invoice_number}</p>
-                        </td>
-                        <td className="py-3 px-4">
-                          <p className="text-sm font-medium text-foreground">
-                            {notes?.plan_name || invoice.quotes?.quote_number || '-'}
-                          </p>
-                          {notes?.region && (
-                            <p className="text-xs text-muted-foreground capitalize">{notes.region}</p>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <p className="text-sm text-foreground">
-                            {invoice.quotes?.contact_name || notes?.payment_email || '-'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {invoice.quotes?.contact_email || ''}
-                          </p>
-                        </td>
-                        <td className="py-3 px-4">
-                          <p className="font-semibold text-foreground">
-                            {notes?.currency === '$' ? '$' : '₹'}{Number(invoice.total_amount).toLocaleString()}
-                          </p>
-                          {invoice.tax_amount > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              incl. tax ₹{Number(invoice.tax_amount).toLocaleString()}
-                            </p>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <Badge className={`${statusColors[invoice.status || 'draft']} flex items-center gap-1 w-fit`}>
-                            {statusIcons[invoice.status || 'draft']}
-                            {invoice.status || 'draft'}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          {notes?.razorpay_payment_id ? (
-                            <div>
-                              <Badge variant="outline" className="text-xs bg-green-50 border-green-200 text-green-700">
-                                <CreditCard className="h-3 w-3 mr-1" />
-                                Razorpay
-                              </Badge>
-                              <p className="text-[10px] text-muted-foreground mt-1 font-mono">
-                                {notes.razorpay_payment_id.slice(0, 12)}...
-                              </p>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <p className="text-sm text-foreground">
-                            {new Date(invoice.created_at).toLocaleDateString('en-IN', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
-                          </p>
-                          {invoice.paid_at && (
-                            <p className="text-xs text-green-600">
-                              Paid: {new Date(invoice.paid_at).toLocaleDateString()}
-                            </p>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => setSelectedInvoice(invoice)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {filteredInvoices.map((invoice) => (
+                    <tr key={invoice.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-4">
+                        <p className="font-mono font-medium text-sm">{invoice.invoiceNumber}</p>
+                      </td>
+                      <td className="py-3 px-4">
+                        <p className="text-sm font-medium text-foreground">{invoice.quoteNumber || "-"}</p>
+                      </td>
+                      <td className="py-3 px-4">
+                        <p className="text-sm text-foreground">{invoice.contactName || "-"}</p>
+                        <p className="text-xs text-muted-foreground">{invoice.contactEmail || ""}</p>
+                      </td>
+                      <td className="py-3 px-4">
+                        <p className="font-semibold text-foreground">₹{Number(invoice.totalAmount).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">incl. tax ₹{Number(invoice.taxAmount).toLocaleString()}</p>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge className={`${statusColors[invoice.status || "draft"]} flex items-center gap-1 w-fit`}>
+                          {statusIcons[invoice.status || "draft"]}
+                          {invoice.status || "draft"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4">
+                        <p className="text-sm text-foreground">
+                          {new Date(invoice.dueDateUtc).toLocaleDateString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedInvoice(invoice)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -447,7 +336,6 @@ export const AdminInvoices = () => {
         </CardContent>
       </Card>
 
-      {/* Invoice Detail Modal */}
       <Dialog open={!!selectedInvoice} onOpenChange={() => setSelectedInvoice(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -456,299 +344,81 @@ export const AdminInvoices = () => {
               Invoice Details
             </DialogTitle>
           </DialogHeader>
-          
+
           {selectedInvoice && (
-            <Tabs defaultValue="details" className="w-full" onValueChange={async (val) => {
-              if (val === 'downloads' && selectedInvoice) {
-                setLoadingDownloads(true);
-                try {
-                  // Use raw fetch since table may not exist in types yet
-                  const { data, error } = await platform
-                    .from('invoice_downloads' as any)
-                    .select('*')
-                    .eq('invoice_id', selectedInvoice.id)
-                    .order('created_at', { ascending: false });
-                  if (!error) setInvoiceDownloads(data || []);
-                } catch (err) {
-                  console.log('Downloads table may not exist yet');
-                  setInvoiceDownloads([]);
-                }
-                setLoadingDownloads(false);
-              }
-            }}>
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="details">Invoice Details</TabsTrigger>
-                <TabsTrigger value="payment">Payment Info</TabsTrigger>
-                <TabsTrigger value="downloads" className="flex items-center gap-1">
-                  <FileDown className="h-3 w-3" />
-                  Downloads
-                </TabsTrigger>
-              </TabsList>
+            <div className="space-y-6">
+              <div className="p-4 rounded-xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
+                <p className="text-sm text-muted-foreground mb-1">Invoice Number</p>
+                <p className="text-xl font-mono font-bold text-foreground">{selectedInvoice.invoiceNumber}</p>
+              </div>
 
-              <TabsContent value="details" className="space-y-6 mt-4">
-                <div className="p-4 rounded-xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
-                  <p className="text-sm text-muted-foreground mb-1">Invoice Number</p>
-                  <p className="text-xl font-mono font-bold text-foreground">
-                    {selectedInvoice.invoice_number}
-                  </p>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-lg bg-muted/30">
+                  <p className="text-sm text-muted-foreground mb-1">Quote</p>
+                  <p className="font-medium">{selectedInvoice.quoteNumber || "-"}</p>
                 </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-muted/30">
-                    <p className="text-sm text-muted-foreground mb-1">Plan/Service</p>
-                    <p className="font-medium">
-                      {parseNotes(selectedInvoice.notes)?.plan_name || 
-                       selectedInvoice.quotes?.quote_number || '-'}
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/30">
-                    <p className="text-sm text-muted-foreground mb-1">Contact</p>
-                    <p className="font-medium">
-                      {selectedInvoice.quotes?.contact_name || 
-                       parseNotes(selectedInvoice.notes)?.payment_email || '-'}
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/30">
-                    <p className="text-sm text-muted-foreground mb-1">Created</p>
-                    <p className="font-medium">
-                      {new Date(selectedInvoice.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/30">
-                    <p className="text-sm text-muted-foreground mb-1">Status</p>
-                    <Badge className={statusColors[selectedInvoice.status || 'draft']}>
-                      {selectedInvoice.status || 'draft'}
-                    </Badge>
-                  </div>
+                <div className="p-4 rounded-lg bg-muted/30">
+                  <p className="text-sm text-muted-foreground mb-1">Contact</p>
+                  <p className="font-medium">{selectedInvoice.contactName || "-"}</p>
+                  <p className="text-xs text-muted-foreground">{selectedInvoice.contactEmail || ""}</p>
                 </div>
-
-                <div className="p-4 bg-gradient-to-br from-muted/50 to-muted/20 rounded-xl space-y-3">
-                  <h4 className="font-semibold text-foreground">Pricing Breakdown</h4>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-medium">₹{Number(selectedInvoice.amount).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Tax ({selectedInvoice.tax_percent || 0}%)</span>
-                    <span className="font-medium">₹{Number(selectedInvoice.tax_amount).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-3 border-t border-border">
-                    <span className="font-semibold">Total Amount</span>
-                    <span className="text-2xl font-bold text-primary">
-                      ₹{Number(selectedInvoice.total_amount).toLocaleString()}
-                    </span>
-                  </div>
+                <div className="p-4 rounded-lg bg-muted/30">
+                  <p className="text-sm text-muted-foreground mb-1">Created</p>
+                  <p className="font-medium">{new Date(selectedInvoice.createdAtUtc).toLocaleString()}</p>
                 </div>
-
-                {/* Add-ons if available */}
-                {parseNotes(selectedInvoice.notes)?.addons?.length > 0 && (
-                  <div className="p-4 rounded-xl border border-border">
-                    <h4 className="font-semibold text-foreground mb-3">Add-ons</h4>
-                    <div className="space-y-2">
-                      {parseNotes(selectedInvoice.notes).addons.map((addon: any, index: number) => (
-                        <div key={index} className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">{addon.name}</span>
-                          <span className="font-medium">₹{addon.price?.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Update Status</p>
-                  <Select
-                    value={selectedInvoice.status}
-                    onValueChange={(value) => updateInvoiceStatus(selectedInvoice.id, value)}
-                    disabled={actionLoading}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="sent">Sent</SelectItem>
-                      <SelectItem value="paid">Paid</SelectItem>
-                      <SelectItem value="overdue">Overdue</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="p-4 rounded-lg bg-muted/30">
+                  <p className="text-sm text-muted-foreground mb-1">Due Date</p>
+                  <p className="font-medium">{new Date(selectedInvoice.dueDateUtc).toLocaleString()}</p>
                 </div>
-              </TabsContent>
+              </div>
 
-              <TabsContent value="payment" className="space-y-6 mt-4">
-                {selectedInvoice.paid_at ? (
-                  <>
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/5 border border-green-500/20">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle className="h-8 w-8 text-green-600" />
-                        <div>
-                          <p className="font-semibold text-green-700">Payment Successful</p>
-                          <p className="text-sm text-muted-foreground">
-                            Paid on {new Date(selectedInvoice.paid_at).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+              <div className="p-4 bg-gradient-to-br from-muted/50 to-muted/20 rounded-xl space-y-3">
+                <h4 className="font-semibold text-foreground">Pricing Breakdown</h4>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="font-medium">₹{Number(selectedInvoice.amount).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Tax ({selectedInvoice.taxPercent || 0}%)</span>
+                  <span className="font-medium">₹{Number(selectedInvoice.taxAmount).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center pt-3 border-t border-border">
+                  <span className="font-semibold">Total Amount</span>
+                  <span className="text-2xl font-bold text-primary">₹{Number(selectedInvoice.totalAmount).toLocaleString()}</span>
+                </div>
+              </div>
 
-                    {parseNotes(selectedInvoice.notes)?.razorpay_payment_id && (
-                      <div className="space-y-4">
-                        <h4 className="font-semibold text-foreground flex items-center gap-2">
-                          <CreditCard className="h-4 w-4 text-primary" />
-                          Razorpay Transaction Details
-                        </h4>
-                        <div className="grid gap-3">
-                          <div className="p-3 rounded-lg bg-muted/30 flex justify-between">
-                            <span className="text-sm text-muted-foreground">Payment ID</span>
-                            <span className="font-mono text-sm">
-                              {parseNotes(selectedInvoice.notes).razorpay_payment_id}
-                            </span>
-                          </div>
-                          {parseNotes(selectedInvoice.notes).razorpay_order_id && (
-                            <div className="p-3 rounded-lg bg-muted/30 flex justify-between">
-                              <span className="text-sm text-muted-foreground">Order ID</span>
-                              <span className="font-mono text-sm">
-                                {parseNotes(selectedInvoice.notes).razorpay_order_id}
-                              </span>
-                            </div>
-                          )}
-                          {parseNotes(selectedInvoice.notes).payment_method && (
-                            <div className="p-3 rounded-lg bg-muted/30 flex justify-between">
-                              <span className="text-sm text-muted-foreground">Payment Method</span>
-                              <span className="capitalize">
-                                {parseNotes(selectedInvoice.notes).payment_method}
-                              </span>
-                            </div>
-                          )}
-                          {parseNotes(selectedInvoice.notes).payment_email && (
-                            <div className="p-3 rounded-lg bg-muted/30 flex justify-between">
-                              <span className="text-sm text-muted-foreground">Payment Email</span>
-                              <span>{parseNotes(selectedInvoice.notes).payment_email}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="p-8 text-center">
-                    <Clock className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground">No payment recorded yet</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Payment details will appear here once the invoice is paid
-                    </p>
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="downloads" className="space-y-4 mt-4">
-                {loadingDownloads ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                ) : invoiceDownloads.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <FileDown className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground">No downloads recorded yet</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Download history will appear here when PDFs are downloaded
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-semibold text-foreground flex items-center gap-2">
-                        <History className="h-4 w-4 text-primary" />
-                        Download History
-                      </h4>
-                      <Badge variant="secondary">{invoiceDownloads.length} downloads</Badge>
-                    </div>
-                    <div className="space-y-2">
-                      {invoiceDownloads.map((download: any) => (
-                        <div 
-                          key={download.id} 
-                          className="p-4 rounded-lg bg-muted/30 border border-border/50"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <User className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-medium text-sm">
-                                  {download.downloaded_by_name || download.downloaded_by_email || 'Anonymous'}
-                                </span>
-                              </div>
-                              {download.downloaded_by_email && (
-                                <p className="text-xs text-muted-foreground pl-6">
-                                  {download.downloaded_by_email}
-                                </p>
-                              )}
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {download.download_type?.toUpperCase() || 'PDF'}
-                            </Badge>
-                          </div>
-                          <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-2 gap-3 text-xs">
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              {new Date(download.created_at).toLocaleString('en-IN', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </div>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Globe className="h-3 w-3" />
-                              {download.ip_address || 'Unknown IP'}
-                            </div>
-                          </div>
-                          {download.user_agent && (
-                            <p className="text-[10px] text-muted-foreground/70 mt-2 truncate">
-                              {download.user_agent.slice(0, 80)}...
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Update Status</p>
+                <Select
+                  value={selectedInvoice.status}
+                  onValueChange={(value: "draft" | "sent" | "paid" | "overdue" | "cancelled" | "failed") =>
+                    updateInvoiceStatus(selectedInvoice.id, value)
+                  }
+                  disabled={actionLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           )}
 
-          <DialogFooter className="mt-4">
-            <Button 
-              variant="outline" 
-              disabled={downloadLoading}
-              onClick={async () => {
-                if (!selectedInvoice) return;
-                setDownloadLoading(true);
-                try {
-                  const { data, error } = await platform.functions.invoke('download-invoice-pdf', {
-                    body: { invoice_id: selectedInvoice.id }
-                  });
-                  if (error) throw error;
-                  const blob = new Blob([data], { type: 'text/html' });
-                  const url = URL.createObjectURL(blob);
-                  const printWindow = window.open(url, '_blank');
-                  if (printWindow) {
-                    printWindow.onload = () => printWindow.print();
-                  }
-                  toast.success('PDF generated - use browser print to save');
-                  fetchInvoices();
-                } catch (err) {
-                  console.error('PDF download error:', err);
-                  toast.error('Failed to generate PDF');
-                } finally {
-                  setDownloadLoading(false);
-                }
-              }}
-            >
-              {downloadLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-              Download PDF
-            </Button>
-          </DialogFooter>
+          {actionLoading && (
+            <div className="flex items-center justify-center py-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Updating invoice status...
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
