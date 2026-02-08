@@ -7,7 +7,6 @@ resources:
   - secret-provider-class.yaml
   - service.yaml
   - ingress.yaml
-  - ingress-canary.yaml
   - analysis-template.yaml
   - rollout.yaml
   - hpa.yaml
