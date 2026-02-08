@@ -57,6 +57,9 @@ flowchart LR
   A --> OT[OpenTelemetry + Serilog]
   OT --> LAW[Log Analytics]
   OT --> APPI[Application Insights]
+  LAW --> AMG[Azure Managed Grafana\nUnified UI]
+  APPI --> AMG
+  PROM[Managed Prometheus\n(Azure Monitor)] --> AMG
   LAW --> MON[Azure Monitor Alerts]
   MON --> LA[Logic App -> Slack]
           </div>
@@ -94,6 +97,7 @@ flowchart TD
   RG --> APPCFG[huminex-dev-appcfg-ohx5ka]
   RG --> LAW[huminex-dev-law]
   RG --> APPI[huminex-dev-appi]
+  RG --> AMG[huminex-dev-grafana]
   RG --> WB[HUMINEX Workbook]
   RG --> LOGIC[huminex-dev-alert-relay-la]
   LAW --> ALERTS[Metric + KQL Alerts]

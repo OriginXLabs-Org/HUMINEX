@@ -21,6 +21,10 @@ flowchart LR
   O --> L[Log Analytics]
   O --> AP[Application Insights]
 
+  L --> AMG[Azure Managed Grafana\nUnified UI]
+  AP --> AMG
+  PROM[Managed Prometheus\n(Azure Monitor)] --> AMG
+
   AP --> WB[HUMINEX Workbook]
   L --> AL[Azure Monitor Alerts]
   AL --> LA[Logic App Slack Relay]

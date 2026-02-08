@@ -1567,22 +1567,23 @@ public sealed class InternalAdminController(
             lastUpdatedUtc);
     }
 
-    private List<AzureResourceInventoryItem> BuildInventory(AzureResourceInventoryOptions azure)
-    {
-        return
-        [
-            new AzureResourceInventoryItem("self", "API Service", "core", "app", "huminex-api", configuration["InternalAdmin:Azure:ApiPublicUrl"] ?? "https://api.gethuminex.com", "API process readiness check"),
-            new AzureResourceInventoryItem("postgres", "Azure PostgreSQL", "data", "postgresqlFlexibleServer", azure.PostgresServerName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.DBforPostgreSQL/flexibleServers", azure.PostgresServerName), "Primary transactional database"),
-            new AzureResourceInventoryItem("redis", "Azure Cache for Redis", "cache", "redis", azure.RedisName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Cache/redis", azure.RedisName), "Distributed cache and token/session acceleration"),
-            new AzureResourceInventoryItem("servicebus", "Azure Service Bus", "messaging", "serviceBusNamespace", azure.ServiceBusNamespace, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.ServiceBus/namespaces", azure.ServiceBusNamespace), "Event bus and async workflows"),
-            new AzureResourceInventoryItem("blobstorage", "Azure Blob Storage", "storage", "storageAccount", azure.StorageAccountName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Storage/storageAccounts", azure.StorageAccountName), "Documents and artifacts storage"),
-            new AzureResourceInventoryItem("aks-cluster", "AKS Cluster", "aks", "managedCluster", azure.AksClusterName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.ContainerService/managedClusters", azure.AksClusterName), "Kubernetes control plane"),
-            new AzureResourceInventoryItem("acr", "Azure Container Registry", "containers", "containerRegistry", azure.AcrName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.ContainerRegistry/registries", azure.AcrName), "Container images"),
-            new AzureResourceInventoryItem("keyvault", "Azure Key Vault", "security", "vault", azure.KeyVaultName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.KeyVault/vaults", azure.KeyVaultName), "Secrets and certificates"),
-            new AzureResourceInventoryItem("appinsights", "Application Insights", "observability", "applicationInsights", azure.ApplicationInsightsName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Insights/components", azure.ApplicationInsightsName), "APM, traces, and failures"),
-            new AzureResourceInventoryItem("loganalytics", "Log Analytics Workspace", "observability", "logAnalyticsWorkspace", azure.LogAnalyticsWorkspaceName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.OperationalInsights/workspaces", azure.LogAnalyticsWorkspaceName), "Central log query workspace")
-        ];
-    }
+	    private List<AzureResourceInventoryItem> BuildInventory(AzureResourceInventoryOptions azure)
+	    {
+	        return
+	        [
+	            new AzureResourceInventoryItem("self", "API Service", "core", "app", "huminex-api", configuration["InternalAdmin:Azure:ApiPublicUrl"] ?? "https://api.gethuminex.com", "API process readiness check"),
+	            new AzureResourceInventoryItem("postgres", "Azure PostgreSQL", "data", "postgresqlFlexibleServer", azure.PostgresServerName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.DBforPostgreSQL/flexibleServers", azure.PostgresServerName), "Primary transactional database"),
+	            new AzureResourceInventoryItem("redis", "Azure Cache for Redis", "cache", "redis", azure.RedisName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Cache/redis", azure.RedisName), "Distributed cache and token/session acceleration"),
+	            new AzureResourceInventoryItem("servicebus", "Azure Service Bus", "messaging", "serviceBusNamespace", azure.ServiceBusNamespace, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.ServiceBus/namespaces", azure.ServiceBusNamespace), "Event bus and async workflows"),
+	            new AzureResourceInventoryItem("blobstorage", "Azure Blob Storage", "storage", "storageAccount", azure.StorageAccountName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Storage/storageAccounts", azure.StorageAccountName), "Documents and artifacts storage"),
+	            new AzureResourceInventoryItem("aks-cluster", "AKS Cluster", "aks", "managedCluster", azure.AksClusterName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.ContainerService/managedClusters", azure.AksClusterName), "Kubernetes control plane"),
+	            new AzureResourceInventoryItem("acr", "Azure Container Registry", "containers", "containerRegistry", azure.AcrName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.ContainerRegistry/registries", azure.AcrName), "Container images"),
+	            new AzureResourceInventoryItem("keyvault", "Azure Key Vault", "security", "vault", azure.KeyVaultName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.KeyVault/vaults", azure.KeyVaultName), "Secrets and certificates"),
+	            new AzureResourceInventoryItem("appinsights", "Application Insights", "observability", "applicationInsights", azure.ApplicationInsightsName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Insights/components", azure.ApplicationInsightsName), "APM, traces, and failures"),
+	            new AzureResourceInventoryItem("loganalytics", "Log Analytics Workspace", "observability", "logAnalyticsWorkspace", azure.LogAnalyticsWorkspaceName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.OperationalInsights/workspaces", azure.LogAnalyticsWorkspaceName), "Central log query workspace"),
+	            new AzureResourceInventoryItem("managed-grafana", "Azure Managed Grafana", "observability", "managedGrafana", "huminex-dev-grafana", BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Dashboard/grafana", "huminex-dev-grafana"), "Unified observability UI (Azure-hosted, no custom DNS required)")
+	        ];
+	    }
 
     private static string BuildPortalResourceUrl(string subscriptionId, string resourceGroup, string resourceType, string resourceName)
     {
