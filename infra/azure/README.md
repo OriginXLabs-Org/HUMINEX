@@ -104,6 +104,51 @@ az appconfig list -g rg-huminex -o table
 - Update region/SKU values in `main.rg.bicep` based on cost/perf target.
 - For production, tighten networking (private endpoints, private AKS/Postgres access).
 
+## HUMINEX Slack Alerting Stack
+
+Use the dedicated alerting template to wire Azure Monitor alerts to Slack through a Logic App relay:
+
+- Template: `infra/azure/bicep/monitoring.alerts.bicep`
+- Deploy script: `infra/azure/scripts/deploy-alerting.sh`
+
+### What it creates
+
+- Logic App webhook relay to Slack
+- Action Groups:
+  - `${namePrefix}-${environment}-ag-critical`
+  - `${namePrefix}-${environment}-ag-warning`
+- 23 alert rules (log + metric) across:
+  - AKS / infra
+  - App Insights API health/performance
+  - Security/identity
+  - FinOps/cost anomalies
+  - Platform deployment/scale events
+
+### Deploy
+
+```bash
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/xxx/yyy/zzz"
+export SLACK_CHANNEL_MENTION="#huminex-alerts"
+export ENVIRONMENT="prod" # or dev/stage
+bash infra/azure/scripts/deploy-alerting.sh
+```
+
+### Optional overrides
+
+- `RESOURCE_GROUP` (default: `rg-huminex`)
+- `LOG_ANALYTICS_WORKSPACE_NAME` (default: `${namePrefix}-${environment}-law`)
+- `APP_INSIGHTS_NAME` (default: `${namePrefix}-${environment}-appi`)
+- `DAILY_SPEND_THRESHOLD_USD` (default: `300`)
+- `MONTHLY_SPEND_THRESHOLD_USD` (default: `9000`)
+- `OWNER`, `TEAM`, `COST_CENTER`
+
+### Validation in Portal
+
+1. `Monitor > Alerts > Alert rules` (filter name prefix `huminex-<env>-`)
+2. `Monitor > Alerts > Action groups`
+3. `Logic Apps > huminex-<env>-alert-relay-la`
+4. Trigger a test alert and verify delivery in Slack channel `#huminex-alerts`
+
 ## GitHub Actions Secrets Required
 
 For `.github/workflows/azure-infra-deploy.yml` and `.github/workflows/backend-image-push.yml`:

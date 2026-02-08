@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "slackWebhookUrl": {
+      "type": "SecureString"
+    },
+    "channelMention": {
+      "type": "String"
+    },
+    "workbookUrl": {
+      "type": "String"
+    },
+    "azurePortalBaseUrl": {
+      "type": "String"
+    },
+    "defaultEnvironment": {
+      "type": "String"
+    }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "schema": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "actions": {
+    "Post_To_Slack": {
+      "type": "Http",
+      "runAfter": {},
+      "inputs": {
+        "method": "POST",
+        "uri": "@parameters('slackWebhookUrl')",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "text": "@{concat(if(equals(parameters('channelMention'), ''), '', concat(parameters('channelMention'), ' ')), ':rotating_light: *HUMINEX Alert*', '\nSeverity: ', coalesce(triggerBody()?['data']?['essentials']?['severity'], 'Sev3'), '\nRule: ', coalesce(triggerBody()?['data']?['essentials']?['alertRule'], 'n/a'), '\nCondition: ', coalesce(triggerBody()?['data']?['essentials']?['monitorCondition'], 'n/a'), '\nEnvironment: ', coalesce(triggerBody()?['data']?['customProperties']?['environment'], parameters('defaultEnvironment')), '\nResource: ', coalesce(first(triggerBody()?['data']?['essentials']?['alertTargetIDs']), 'n/a'), '\nResource URL: ', if(empty(triggerBody()?['data']?['essentials']?['alertTargetIDs']), parameters('azurePortalBaseUrl'), concat(parameters('azurePortalBaseUrl'), '/#@/resource', first(triggerBody()?['data']?['essentials']?['alertTargetIDs']), '/overview')), '\nLogs URL: ', coalesce(triggerBody()?['data']?['alertContext']?['LinkToFilteredSearchResultsUI'], triggerBody()?['data']?['alertContext']?['LinkToSearchResultsUI'], parameters('workbookUrl')), '\nDashboard: ', parameters('workbookUrl'))}"
+        }
+      }
+    }
+  },
+  "outputs": {}
+}
