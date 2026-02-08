@@ -22,6 +22,7 @@
           <a href="#hld">HLD Diagram</a>
           <a href="#cicd">CI/CD Diagram</a>
           <a href="#azure">Azure Diagram</a>
+          <a href="#openhuman">OpenHuman</a>
           <a href="#techstack">Tech Stack + Libraries</a>
           <a href="#services">Azure Services Inventory</a>
           <a href="#modules">15 Modules Tracker</a>
@@ -45,9 +46,9 @@
           <h2>HUMINEX HLD Diagram</h2>
           <div class="mermaid">
 flowchart LR
-  U[Users\nEmployer, Employee, Internal Admin] --> W[Frontend Web\nReact + Vite + MSAL]
-  W --> I[NGINX Ingress\napi.gethuminex.com]
-  I --> A[HUMINEX API\n.NET 8]
+  U[Users<br/>Employer, Employee, Internal Admin] --> W[Frontend Web<br/>React + Vite + MSAL]
+  W --> I[NGINX Ingress<br/>api.gethuminex.com]
+  I --> A[HUMINEX API<br/>.NET 8]
   A --> P[(Azure PostgreSQL)]
   A --> R[(Redis)]
   A --> S[(Service Bus)]
@@ -57,9 +58,9 @@ flowchart LR
   A --> OT[OpenTelemetry + Serilog]
   OT --> LAW[Log Analytics]
   OT --> APPI[Application Insights]
-  LAW --> AMG[Azure Managed Grafana\nUnified UI]
+  LAW --> AMG[Azure Managed Grafana<br/>Unified UI]
   APPI --> AMG
-  PROM[Managed Prometheus\n(Azure Monitor)] --> AMG
+  PROM[Managed Prometheus<br/>(Azure Monitor)] --> AMG
   LAW --> MON[Azure Monitor Alerts]
   MON --> LA[Logic App -> Slack]
           </div>
@@ -103,6 +104,60 @@ flowchart TD
   LAW --> ALERTS[Metric + KQL Alerts]
   ALERTS --> LOGIC
           </div>
+        </section>
+
+        <section class="section" id="openhuman">
+          <h2>OpenHuman (Interview Intelligence Platform)</h2>
+          <p>OpenHuman is the HUMINEX interview product: an agentic, rubric-based interview and evaluation platform designed for enterprise-grade governance, tenant isolation, and horizontal scalability. It integrates with HUMINEX ATS and onboarding.</p>
+
+          <h3>OpenHuman HLD</h3>
+          <div class="mermaid">
+flowchart LR
+  C[Candidate] --> WEB[Interview Web<br/>Browser + WebRTC]
+  INT[Interviewer/Recruiter] --> STUDIO[Studio UI<br/>Rubric + question bank]
+  WEB --> GW[OpenHuman Gateway API<br/>Auth + session]
+  STUDIO --> GW
+  GW --> ORCH[Interview Orchestrator<br/>State machine]
+  ORCH --> BUS[Service Bus]
+  ORCH --> DB[(PostgreSQL)]
+  ORCH --> CACHE[(Redis)]
+  ORCH --> BLOB[(Blob Storage<br/>audio/transcripts)]
+  ORCH --> STT[Speech-to-Text<br/>(Azure Speech)]
+  ORCH --> LLM[LLM Runtime<br/>(Azure OpenAI)]
+  ORCH --> RAG[RAG Knowledge<br/>(Azure AI Search)]
+  ORCH --> HUM[HUMINEX API<br/>ATS + onboarding]
+  ORCH --> OTEL[OpenTelemetry]
+  OTEL --> LAW[Log Analytics]
+  OTEL --> APPI[Application Insights]
+          </div>
+
+          <h3>OpenHuman Tech Stack (recommended)</h3>
+          <table>
+            <tr><th>Layer</th><th>Choice</th></tr>
+            <tr><td>Runtime</td><td>AKS + NGINX Ingress + Argo CD + Argo Rollouts</td></tr>
+            <tr><td>Backend</td><td>.NET 8 gateway + worker services</td></tr>
+            <tr><td>Data</td><td>PostgreSQL + Redis + Blob Storage + Service Bus</td></tr>
+            <tr><td>AI</td><td>Azure OpenAI + Azure Speech + Azure AI Search (RAG)</td></tr>
+            <tr><td>Observability</td><td>OpenTelemetry + Application Insights + Log Analytics + Azure Managed Grafana</td></tr>
+          </table>
+
+          <h3>OpenHuman Modules and Phases Tracker</h3>
+          <table>
+            <tr><th>Phase</th><th>Status</th><th>Notes</th></tr>
+            <tr><td>Foundation</td><td>Backlog</td><td>Tenant isolation, RBAC, audit, prompt/model registry</td></tr>
+            <tr><td>Interview Experience</td><td>Backlog</td><td>Candidate UI, WebRTC/audio capture, accessibility</td></tr>
+            <tr><td>Studio</td><td>Backlog</td><td>Rubrics, question bank, templates, review workflow</td></tr>
+            <tr><td>Evaluation</td><td>Backlog</td><td>Evidence extraction, scoring, calibration, reports</td></tr>
+            <tr><td>Integrations</td><td>Backlog</td><td>HUMINEX ATS + onboarding, exports/webhooks</td></tr>
+            <tr><td>Governance</td><td>Backlog</td><td>Retention, redaction, cost controls, approvals</td></tr>
+          </table>
+
+          <h3>OpenHuman Runbooks</h3>
+          <ul>
+            <li><code class="inline">Deploy</code>: image push -> GitOps tag -> Argo sync -> health verify</li>
+            <li><code class="inline">Incident triage</code>: App Insights failures, LAW KQL queries, SB backlog</li>
+            <li><code class="inline">Governance</code>: Key Vault rotation, App Config changes, audit reviews</li>
+          </ul>
         </section>
 
         <section class="section" id="techstack">

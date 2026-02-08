@@ -1,0 +1,33 @@
+---
+title: OpenHuman Tech Stack
+---
+
+# OpenHuman Tech Stack
+
+## Runtime
+
+- AKS (Kubernetes)
+- NGINX Ingress
+- Argo CD + Argo Rollouts
+
+## Backend
+
+- .NET 8 (Gateway API + workers)
+- PostgreSQL (session + evaluation data)
+- Redis (session cache + rate limits)
+- Azure Service Bus (commands/events)
+- Azure Blob Storage (audio + artifacts)
+- Azure Key Vault + Managed Identity
+
+## AI and media
+
+- Azure OpenAI (LLM runtime)
+- Azure Speech-to-Text (transcription)
+- Azure AI Search (RAG knowledge + policy documents)
+
+## Observability
+
+- OpenTelemetry (traces/metrics/log context)
+- Application Insights + Log Analytics
+- Azure Managed Grafana (unified UI)
+

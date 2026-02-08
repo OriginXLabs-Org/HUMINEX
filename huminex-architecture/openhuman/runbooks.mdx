@@ -1,0 +1,26 @@
+---
+title: OpenHuman Runbooks
+---
+
+# OpenHuman Runbooks
+
+## Deploy
+
+- Delivery: GitHub Actions -> image push -> GitOps tag update -> Argo CD sync
+- Verify:
+  - gateway `/health/ready`
+  - orchestrator worker heartbeat
+  - Service Bus connectivity
+
+## Incident triage
+
+- Check recent failures in Application Insights (dependency failures, request failures)
+- Query session failures in Log Analytics (KQL)
+- Inspect worker backlog (Service Bus subscription metrics)
+
+## Governance
+
+- Rotate secrets: Key Vault versions + restart deployments
+- Review prompt/model configuration changes (App Configuration)
+- Audit: privileged actions + evaluation overrides
+

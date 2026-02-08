@@ -1,0 +1,29 @@
+---
+title: OpenHuman LLD
+---
+
+# OpenHuman Low-Level Design (LLD)
+
+## Services
+
+- `openhuman-gateway` (.NET 8): auth, session bootstrap, tenant/RBAC enforcement, signed upload URLs.
+- `openhuman-orchestrator` (.NET 8 worker): interview state machine, tool calling, evaluation pipeline.
+- `openhuman-transcript` (worker): transcript normalization, redaction, evidence extraction.
+- `openhuman-evaluator` (worker): rubric scoring, calibration, bias checks, report generation.
+
+## Data model (minimum)
+
+- `InterviewSession` (tenantId, jobId, candidateId, status, startedAt, endedAt)
+- `InterviewTurn` (sessionId, speaker, text, ts)
+- `Rubric` (jobId, criteria JSON, weights)
+- `EvaluationResult` (sessionId, criterion, score, evidenceRefs, modelMeta)
+- `Artifact` (sessionId, blobUri, type, hash)
+- `AuditEvent` (actor, action, resourceType, resourceId, outcome, metadata JSON)
+
+## Integration contracts (HUMINEX)
+
+- Publish `openhuman.interview.completed` event (Service Bus)
+- HUMINEX consumes and writes:
+  - ATS candidate stage update
+  - evaluation summary + evidence links
+

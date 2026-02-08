@@ -1,0 +1,44 @@
+---
+title: OpenHuman HLD
+---
+
+# OpenHuman High-Level Design
+
+```mermaid
+flowchart LR
+  C[Candidate] --> WEB[Interview Web<br/>Browser + WebRTC]
+  INT[Interviewer/Recruiter] --> STUDIO[Studio UI<br/>Question bank + rubric]
+
+  WEB --> GW[OpenHuman Gateway API<br/>Auth + session]
+  STUDIO --> GW
+
+  GW --> ORCH[Interview Orchestrator<br/>State machine]
+  ORCH --> BUS[Service Bus<br/>events/commands]
+  ORCH --> DB[(PostgreSQL)]
+  ORCH --> CACHE[(Redis)]
+  ORCH --> BLOB[(Blob Storage<br/>audio/transcripts)]
+
+  ORCH --> STT[Speech-to-Text<br/>(Azure Speech)]
+  ORCH --> LLM[LLM Runtime<br/>(Azure OpenAI)]
+  ORCH --> RAG[RAG / Knowledge<br/>(Azure AI Search)]
+
+  ORCH --> HUM[HUMINEX API<br/>ATS + onboarding]
+
+  ORCH --> OTEL[OpenTelemetry]
+  OTEL --> LAW[Log Analytics]
+  OTEL --> APPI[Application Insights]
+```
+
+## Recommended AI stack (enterprise-grade)
+
+- **Primary LLM provider**: Azure OpenAI (tenant-safe, private networking options, enterprise auth).
+- **Models (recommended)**:
+  - A "flagship" reasoning/chat model for interviewer agent + evaluation.
+  - A smaller/faster model for classification, routing, redaction, and guardrails.
+  - Optional realtime-capable model for low-latency interview interactions.
+- **Agent runtime**:
+  - Use a deterministic **workflow/orchestrator** for interview state (timeouts, retries, idempotency).
+  - Keep LLM calls as tools invoked by the orchestrator, never as the source-of-truth state.
+- **Safety**:
+  - PII redaction before long-term storage, prompt/response logging with policy controls, strict RBAC.
+

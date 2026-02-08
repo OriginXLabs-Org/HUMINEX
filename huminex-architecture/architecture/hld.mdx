@@ -6,9 +6,9 @@ title: HUMINEX HLD
 
 ```mermaid
 flowchart LR
-  U[Users\nEmployer, Employee, Internal Admin] --> W[Frontend Web\nReact + Vite + MSAL]
-  W --> I[NGINX Ingress\napi.gethuminex.com]
-  I --> A[HUMINEX API\n.NET 8]
+  U[Users<br/>Employer, Employee, Internal Admin] --> W[Frontend Web<br/>React + Vite + MSAL]
+  W --> I[NGINX Ingress<br/>api.gethuminex.com]
+  I --> A[HUMINEX API<br/>.NET 8]
 
   A --> P[(Azure PostgreSQL)]
   A --> R[(Azure Cache for Redis)]
@@ -21,9 +21,9 @@ flowchart LR
   O --> L[Log Analytics]
   O --> AP[Application Insights]
 
-  L --> AMG[Azure Managed Grafana\nUnified UI]
+  L --> AMG[Azure Managed Grafana<br/>Unified UI]
   AP --> AMG
-  PROM[Managed Prometheus\n(Azure Monitor)] --> AMG
+  PROM[Managed Prometheus<br/>(Azure Monitor)] --> AMG
 
   AP --> WB[HUMINEX Workbook]
   L --> AL[Azure Monitor Alerts]
