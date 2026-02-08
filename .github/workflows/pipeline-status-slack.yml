@@ -1,0 +1,114 @@
+name: HUMINEX Pipeline Status to Slack
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_run:
+    workflows:
+      - HUMINEX Backend CI
+      - HUMINEX Backend Image Push
+      - HUMINEX CodeQL
+      - HUMINEX E2E Playwright
+      - Frontend CI
+      - HUMINEX Infra Deploy
+    types:
+      - completed
+
+jobs:
+  send-slack-summary:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Validate Slack webhook configuration
+        run: |
+          if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "Missing required secret: SLACK_WEBHOOK_URL"
+            echo "Configure Incoming Webhook URL in repository secrets."
+            exit 1
+          fi
+
+      - name: Build pipeline activity report
+        id: report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TRIGGER_WORKFLOW: ${{ github.event.workflow_run.name }}
+          TRIGGER_STATUS: ${{ github.event.workflow_run.conclusion }}
+          TRIGGER_URL: ${{ github.event.workflow_run.html_url }}
+          SLACK_CHANNEL_MENTION: ${{ secrets.SLACK_CHANNEL_MENTION }}
+        run: |
+          set -euo pipefail
+
+          WORKFLOW_FILES=(
+            "backend-ci.yml"
+            "backend-image-push.yml"
+            "frontend-ci.yml"
+            "e2e-playwright.yml"
+            "codeql.yml"
+            "infra-deploy.yml"
+          )
+
+          WORKFLOW_LABELS=(
+            "Backend CI"
+            "Backend Image Push (CD)"
+            "Frontend CI"
+            "E2E Playwright"
+            "CodeQL"
+            "Infra Deploy (CD)"
+          )
+
+          NOW_UTC="$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          REPORT="${SLACK_CHANNEL_MENTION}\n*HUMINEX Pipeline Status Report*\nTime: ${NOW_UTC}\nRepository: https://github.com/${REPO}\nActions: https://github.com/${REPO}/actions"
+
+          if [ -n "${TRIGGER_WORKFLOW}" ] && [ -n "${TRIGGER_STATUS}" ] && [ -n "${TRIGGER_URL}" ]; then
+            REPORT="${REPORT}\nTriggered by: *${TRIGGER_WORKFLOW}* -> *${TRIGGER_STATUS}* (<${TRIGGER_URL}|view run>)"
+          fi
+
+          for i in "${!WORKFLOW_FILES[@]}"; do
+            WF_FILE="${WORKFLOW_FILES[$i]}"
+            WF_LABEL="${WORKFLOW_LABELS[$i]}"
+
+            RUNS_JSON="$(curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPO}/actions/workflows/${WF_FILE}/runs?per_page=5")"
+
+            LATEST_STATUS="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].status // "unknown"')"
+            LATEST_CONCLUSION="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].conclusion // "n/a"')"
+            LATEST_BRANCH="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].head_branch // "n/a"')"
+            LATEST_SHA="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].head_sha // "n/a"' | cut -c1-7)"
+            LATEST_UPDATED="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].updated_at // "n/a"')"
+            LATEST_URL="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].html_url // ""')"
+
+            ACTIVITY_LINES="$(echo "${RUNS_JSON}" | jq -r '
+              .workflow_runs
+              | map("  - #\(.run_number) | \(.event) | \(.status)/\(.conclusion // "n/a") | \(.head_branch) | \(.updated_at) | \(.html_url)")
+              | join("\n")
+            ')"
+
+            REPORT="${REPORT}\n\n*${WF_LABEL}*"
+            REPORT="${REPORT}\nLatest: ${LATEST_STATUS}/${LATEST_CONCLUSION} | branch=${LATEST_BRANCH} | sha=${LATEST_SHA} | updated=${LATEST_UPDATED}"
+            if [ -n "${LATEST_URL}" ]; then
+              REPORT="${REPORT}\nLatest Run URL: ${LATEST_URL}"
+            fi
+            REPORT="${REPORT}\nRecent Activity:\n${ACTIVITY_LINES}"
+          done
+
+          {
+            echo "text<<EOF"
+            echo -e "${REPORT}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send report to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REPORT_TEXT: ${{ steps.report.outputs.text }}
+        run: |
+          set -euo pipefail
+          PAYLOAD="$(jq -n --arg text "${REPORT_TEXT}" '{text: $text}')"
+          curl -fsSL -X POST -H "Content-Type: application/json" --data "${PAYLOAD}" "${SLACK_WEBHOOK_URL}" >/dev/null
+          echo "Slack pipeline report sent successfully."
