@@ -178,6 +178,75 @@ export type InternalAdminQuoteConversionResponse = {
   invoiceTotalAmount: number;
 };
 
+export type InternalAdminInvoiceResponse = {
+  id: string;
+  tenantId: string;
+  quoteId: string;
+  userId: string;
+  invoiceNumber: string;
+  quoteNumber: string;
+  contactName: string;
+  contactEmail: string;
+  contactCompany: string;
+  amount: number;
+  taxPercent: number;
+  taxAmount: number;
+  totalAmount: number;
+  dueDateUtc: string;
+  status: string;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+};
+
+export type InternalAdminTenantBillingItemResponse = {
+  tenantId: string;
+  tenantName: string;
+  plan: string;
+  status: string;
+  mrr: number;
+  nextBillingAtUtc: string;
+  paymentMethod: string;
+  invoiceCount: number;
+  totalInvoiced: number;
+  totalPaid: number;
+  outstandingAmount: number;
+  overdueAmount: number;
+};
+
+export type InternalAdminTenantBillingResponse = {
+  totalMrr: number;
+  totalArr: number;
+  activeSubscriptions: number;
+  trialAccounts: number;
+  pastDueAccounts: number;
+  items: InternalAdminTenantBillingItemResponse[];
+};
+
+export type InternalAdminRevenuePointResponse = {
+  month: string;
+  mrr: number;
+  arr: number;
+  newMrr: number;
+  churned: number;
+};
+
+export type InternalAdminPlanDistributionResponse = {
+  plan: string;
+  count: number;
+  percent: number;
+};
+
+export type InternalAdminRevenueAnalyticsResponse = {
+  currentMrr: number;
+  mrrGrowthPercent: number;
+  currentArr: number;
+  arpu: number;
+  churnRatePercent: number;
+  netRevenueRetentionPercent: number;
+  timeline: InternalAdminRevenuePointResponse[];
+  planDistribution: InternalAdminPlanDistributionResponse[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api/v1";
 const SESSION_STORAGE_KEY = "huminex_api_session";
 
@@ -327,6 +396,43 @@ export const huminexApi = {
       {
         method: "POST",
       },
+      accessToken
+    ),
+  getInternalInvoices: (
+    limit = 200,
+    status = "all",
+    search?: string,
+    tenantId?: string,
+    accessToken?: string
+  ) =>
+    apiRequest<InternalAdminInvoiceResponse[]>(
+      `/admin/internal/invoices?limit=${limit}&status=${encodeURIComponent(status)}${search ? `&search=${encodeURIComponent(search)}` : ""}${tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : ""}`,
+      {},
+      accessToken
+    ),
+  updateInternalInvoiceStatus: (
+    invoiceId: string,
+    status: "draft" | "sent" | "paid" | "overdue" | "cancelled" | "failed",
+    accessToken?: string
+  ) =>
+    apiRequest<InternalAdminInvoiceResponse>(
+      `/admin/internal/invoices/${invoiceId}/status`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ status }),
+      },
+      accessToken
+    ),
+  getInternalTenantBilling: (limit = 200, search?: string, accessToken?: string) =>
+    apiRequest<InternalAdminTenantBillingResponse>(
+      `/admin/internal/tenant-billing?limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+      {},
+      accessToken
+    ),
+  getInternalRevenueAnalytics: (months = 12, accessToken?: string) =>
+    apiRequest<InternalAdminRevenueAnalyticsResponse>(
+      `/admin/internal/revenue-analytics?months=${months}`,
+      {},
       accessToken
     ),
   me: (accessToken?: string) => apiRequest<UserProfileResponse>("/users/me", {}, accessToken),

@@ -591,6 +591,348 @@ public sealed class InternalAdminController(
         return Ok(new ApiEnvelope<InternalAdminQuoteConversionResponse>(response, HttpContext.TraceIdentifier));
     }
 
+    [HttpGet("invoices")]
+    [ProducesResponseType(typeof(ApiEnvelope<IReadOnlyCollection<InternalAdminInvoiceResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiEnvelope<IReadOnlyCollection<InternalAdminInvoiceResponse>>>> GetInvoices(
+        [FromQuery] int limit = 200,
+        [FromQuery] string? status = null,
+        [FromQuery] string? search = null,
+        [FromQuery] Guid? tenantId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsInternalAdmin())
+        {
+            return Forbid();
+        }
+
+        var normalizedLimit = Math.Clamp(limit, 1, 1000);
+        var normalizedStatus = (status ?? string.Empty).Trim().ToLowerInvariant();
+        var normalizedSearch = (search ?? string.Empty).Trim().ToLowerInvariant();
+        var now = DateTime.UtcNow;
+
+        var query = (
+            from invoice in dbContext.Invoices.IgnoreQueryFilters().AsNoTracking()
+            join quote in dbContext.Quotes.IgnoreQueryFilters().AsNoTracking() on invoice.QuoteId equals quote.Id into quoteGroup
+            from quote in quoteGroup.DefaultIfEmpty()
+            select new { Invoice = invoice, Quote = quote }
+        ).AsQueryable();
+
+        if (tenantId.HasValue)
+        {
+            query = query.Where(x => x.Invoice.TenantId == tenantId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedStatus) && normalizedStatus != "all")
+        {
+            query = query.Where(x => x.Invoice.Status == normalizedStatus);
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedSearch))
+        {
+            query = query.Where(x =>
+                x.Invoice.InvoiceNumber.ToLower().Contains(normalizedSearch)
+                || (x.Quote != null && (
+                    x.Quote.QuoteNumber.ToLower().Contains(normalizedSearch)
+                    || x.Quote.ContactName.ToLower().Contains(normalizedSearch)
+                    || x.Quote.ContactEmail.ToLower().Contains(normalizedSearch)
+                    || x.Quote.ContactCompany.ToLower().Contains(normalizedSearch)
+                )));
+        }
+
+        var invoices = await query
+            .OrderByDescending(x => x.Invoice.CreatedAtUtc)
+            .Take(normalizedLimit)
+            .ToListAsync(cancellationToken);
+
+        var response = invoices
+            .Select(x => new InternalAdminInvoiceResponse(
+                x.Invoice.Id,
+                x.Invoice.TenantId,
+                x.Invoice.QuoteId,
+                x.Invoice.UserId,
+                x.Invoice.InvoiceNumber,
+                x.Quote?.QuoteNumber ?? string.Empty,
+                x.Quote?.ContactName ?? string.Empty,
+                x.Quote?.ContactEmail ?? string.Empty,
+                x.Quote?.ContactCompany ?? string.Empty,
+                x.Invoice.Amount,
+                x.Invoice.TaxPercent,
+                x.Invoice.TaxAmount,
+                x.Invoice.TotalAmount,
+                x.Invoice.DueDateUtc,
+                ResolveInvoiceStatus(x.Invoice.Status, x.Invoice.DueDateUtc, now),
+                x.Invoice.CreatedAtUtc,
+                x.Invoice.UpdatedAtUtc))
+            .ToArray();
+
+        return Ok(new ApiEnvelope<IReadOnlyCollection<InternalAdminInvoiceResponse>>(response, HttpContext.TraceIdentifier));
+    }
+
+    [HttpPut("invoices/{invoiceId:guid}/status")]
+    [ProducesResponseType(typeof(ApiEnvelope<InternalAdminInvoiceResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiEnvelope<InternalAdminInvoiceResponse>>> UpdateInvoiceStatus(
+        [FromRoute] Guid invoiceId,
+        [FromBody] UpdateInternalAdminInvoiceStatusRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsInternalAdmin())
+        {
+            return Forbid();
+        }
+
+        var normalizedStatus = (request.Status ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalizedStatus is not ("draft" or "sent" or "paid" or "overdue" or "cancelled" or "failed"))
+        {
+            return BadRequest(new
+            {
+                code = "invalid_status",
+                message = "Status must be one of: draft, sent, paid, overdue, cancelled, failed."
+            });
+        }
+
+        var invoice = await dbContext.Invoices
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == invoiceId, cancellationToken);
+        if (invoice is null)
+        {
+            return NotFound();
+        }
+
+        invoice.SetStatus(normalizedStatus);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var quote = await dbContext.Quotes
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == invoice.QuoteId, cancellationToken);
+
+        dbContext.AuditTrails.Add(new Huminex.BuildingBlocks.Infrastructure.Persistence.Entities.AuditTrailEntity(
+            invoice.TenantId,
+            tenantProvider.UserId,
+            tenantProvider.UserEmail,
+            "internal_admin_invoice_status_updated",
+            "invoice",
+            invoice.Id.ToString(),
+            "success",
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                invoice.InvoiceNumber,
+                status = invoice.Status
+            })));
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var response = new InternalAdminInvoiceResponse(
+            invoice.Id,
+            invoice.TenantId,
+            invoice.QuoteId,
+            invoice.UserId,
+            invoice.InvoiceNumber,
+            quote?.QuoteNumber ?? string.Empty,
+            quote?.ContactName ?? string.Empty,
+            quote?.ContactEmail ?? string.Empty,
+            quote?.ContactCompany ?? string.Empty,
+            invoice.Amount,
+            invoice.TaxPercent,
+            invoice.TaxAmount,
+            invoice.TotalAmount,
+            invoice.DueDateUtc,
+            invoice.Status,
+            invoice.CreatedAtUtc,
+            invoice.UpdatedAtUtc);
+
+        return Ok(new ApiEnvelope<InternalAdminInvoiceResponse>(response, HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("tenant-billing")]
+    [ProducesResponseType(typeof(ApiEnvelope<InternalAdminTenantBillingResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiEnvelope<InternalAdminTenantBillingResponse>>> GetTenantBilling(
+        [FromQuery] int limit = 200,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsInternalAdmin())
+        {
+            return Forbid();
+        }
+
+        var normalizedLimit = Math.Clamp(limit, 1, 1000);
+        var normalizedSearch = (search ?? string.Empty).Trim().ToLowerInvariant();
+        var now = DateTime.UtcNow;
+        var monthStartUtc = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var employers = await BuildEmployerRows(cancellationToken);
+        var invoiceRows = await dbContext.Invoices
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Select(x => new InternalBillingInvoiceSnapshot(
+                x.TenantId,
+                x.TotalAmount,
+                x.Status,
+                x.DueDateUtc,
+                x.CreatedAtUtc))
+            .ToListAsync(cancellationToken);
+
+        var invoiceByTenant = invoiceRows
+            .GroupBy(x => x.TenantId)
+            .ToDictionary(group => group.Key, group => group.ToArray());
+
+        var items = employers
+            .Where(x =>
+                string.IsNullOrWhiteSpace(normalizedSearch)
+                || x.Name.ToLower().Contains(normalizedSearch)
+                || x.Slug.ToLower().Contains(normalizedSearch)
+                || x.ContactEmail.ToLower().Contains(normalizedSearch))
+            .Select(x =>
+            {
+                var invoices = invoiceByTenant.TryGetValue(x.Id, out var rows) ? rows : Array.Empty<InternalBillingInvoiceSnapshot>();
+                var totalInvoiced = invoices.Sum(i => i.TotalAmount);
+                var totalPaid = invoices.Where(i => i.Status == "paid").Sum(i => i.TotalAmount);
+                var overdueAmount = invoices
+                    .Where(i => i.Status != "paid" && i.Status != "cancelled" && i.Status != "failed" && i.DueDateUtc < now)
+                    .Sum(i => i.TotalAmount);
+                var outstandingAmount = Math.Max(0m, totalInvoiced - totalPaid);
+                var mrr = invoices
+                    .Where(i => i.Status == "paid" && i.CreatedAtUtc >= monthStartUtc)
+                    .Sum(i => i.TotalAmount);
+                var nextDue = invoices
+                    .Where(i => i.Status != "paid" && i.Status != "cancelled" && i.Status != "failed")
+                    .OrderBy(i => i.DueDateUtc)
+                    .Select(i => (DateTime?)i.DueDateUtc)
+                    .FirstOrDefault();
+                var billingStatus = overdueAmount > 0m
+                    ? "past_due"
+                    : invoices.Length == 0
+                        ? "trial"
+                        : "active";
+
+                return new InternalAdminTenantBillingItemResponse(
+                    x.Id,
+                    x.Name,
+                    DerivePlanName(x.EmployeeCount),
+                    billingStatus,
+                    mrr,
+                    nextDue ?? now.Date.AddDays(30),
+                    "invoice",
+                    invoices.Length,
+                    totalInvoiced,
+                    totalPaid,
+                    outstandingAmount,
+                    overdueAmount);
+            })
+            .OrderByDescending(x => x.Mrr)
+            .Take(normalizedLimit)
+            .ToArray();
+
+        var response = new InternalAdminTenantBillingResponse(
+            items.Sum(x => x.Mrr),
+            items.Sum(x => x.Mrr) * 12m,
+            items.Count(x => x.Status == "active"),
+            items.Count(x => x.Status == "trial"),
+            items.Count(x => x.Status == "past_due"),
+            items);
+
+        return Ok(new ApiEnvelope<InternalAdminTenantBillingResponse>(response, HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("revenue-analytics")]
+    [ProducesResponseType(typeof(ApiEnvelope<InternalAdminRevenueAnalyticsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiEnvelope<InternalAdminRevenueAnalyticsResponse>>> GetRevenueAnalytics(
+        [FromQuery] int months = 12,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsInternalAdmin())
+        {
+            return Forbid();
+        }
+
+        var normalizedMonths = Math.Clamp(months, 3, 36);
+        var now = DateTime.UtcNow;
+        var firstMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-(normalizedMonths - 1));
+
+        var invoices = await dbContext.Invoices
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.CreatedAtUtc >= firstMonth)
+            .Select(x => new
+            {
+                x.TenantId,
+                x.TotalAmount,
+                x.Status,
+                x.CreatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var points = new List<InternalAdminRevenuePointResponse>(normalizedMonths);
+        var runningMrr = 0m;
+
+        for (var index = 0; index < normalizedMonths; index++)
+        {
+            var monthStart = firstMonth.AddMonths(index);
+            var monthEnd = monthStart.AddMonths(1);
+            var monthRows = invoices.Where(x => x.CreatedAtUtc >= monthStart && x.CreatedAtUtc < monthEnd).ToArray();
+            var newRevenue = monthRows.Where(x => x.Status == "paid" || x.Status == "sent").Sum(x => x.TotalAmount);
+            var churned = monthRows.Where(x => x.Status == "cancelled" || x.Status == "failed").Sum(x => x.TotalAmount);
+
+            runningMrr = Math.Max(0m, runningMrr + newRevenue - churned);
+            var arr = runningMrr * 12m;
+
+            points.Add(new InternalAdminRevenuePointResponse(
+                monthStart.ToString("yyyy-MM"),
+                runningMrr,
+                arr,
+                newRevenue,
+                churned));
+        }
+
+        var current = points.LastOrDefault();
+        var previous = points.Count > 1 ? points[^2] : null;
+        var mrrGrowth = previous is null || previous.Mrr <= 0m
+            ? 0m
+            : Math.Round(((current?.Mrr ?? 0m) - previous.Mrr) * 100m / previous.Mrr, 2, MidpointRounding.AwayFromZero);
+
+        var totalPaidRevenue = invoices.Where(x => x.Status == "paid").Sum(x => x.TotalAmount);
+        var distinctPaidTenants = invoices.Where(x => x.Status == "paid").Select(x => x.TenantId).Distinct().Count();
+        var arpu = distinctPaidTenants > 0
+            ? Math.Round(totalPaidRevenue / distinctPaidTenants, 2, MidpointRounding.AwayFromZero)
+            : 0m;
+        var currentChurn = current?.Churned ?? 0m;
+        var churnRate = (current?.Mrr ?? 0m) <= 0m
+            ? 0m
+            : Math.Round(currentChurn * 100m / (current?.Mrr ?? 1m), 2, MidpointRounding.AwayFromZero);
+        var netMrrChange = (current?.NewMrr ?? 0m) - (current?.Churned ?? 0m);
+        var nrr = (current?.Mrr ?? 0m) <= 0m
+            ? 100m
+            : Math.Round(Math.Max(0m, ((current?.Mrr ?? 0m) + netMrrChange) * 100m / (current?.Mrr ?? 1m)), 2, MidpointRounding.AwayFromZero);
+
+        var employers = await BuildEmployerRows(cancellationToken);
+        var planDist = employers
+            .GroupBy(x => DerivePlanName(x.EmployeeCount))
+            .Select(group => new InternalAdminPlanDistributionResponse(
+                group.Key,
+                group.Count(),
+                group.Count() * 100m / Math.Max(1, employers.Length)))
+            .OrderByDescending(x => x.Count)
+            .ToArray();
+
+        var response = new InternalAdminRevenueAnalyticsResponse(
+            current?.Mrr ?? 0m,
+            mrrGrowth,
+            (current?.Mrr ?? 0m) * 12m,
+            arpu,
+            churnRate,
+            nrr,
+            points,
+            planDist);
+
+        return Ok(new ApiEnvelope<InternalAdminRevenueAnalyticsResponse>(response, HttpContext.TraceIdentifier));
+    }
+
     [HttpGet("system-logs")]
     [ProducesResponseType(typeof(ApiEnvelope<IReadOnlyCollection<InternalSystemLogResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -780,6 +1122,46 @@ public sealed class InternalAdminController(
         return "info";
     }
 
+    private static string ResolveInvoiceStatus(string status, DateTime dueDateUtc, DateTime nowUtc)
+    {
+        if (string.Equals(status, "paid", StringComparison.OrdinalIgnoreCase))
+        {
+            return "paid";
+        }
+
+        if (string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            return "cancelled";
+        }
+
+        if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "failed";
+        }
+
+        if (dueDateUtc < nowUtc)
+        {
+            return "overdue";
+        }
+
+        return string.IsNullOrWhiteSpace(status) ? "draft" : status.Trim().ToLowerInvariant();
+    }
+
+    private static string DerivePlanName(int employeeCount)
+    {
+        if (employeeCount >= 300)
+        {
+            return "enterprise";
+        }
+
+        if (employeeCount >= 50)
+        {
+            return "growth";
+        }
+
+        return "startup";
+    }
+
     private static string DeriveEmployerDisplayName(string email, Guid tenantId)
     {
         var domain = email.Split('@').ElementAtOrDefault(1);
@@ -905,3 +1287,75 @@ public sealed record InternalAdminQuoteConversionResponse(
     string InvoiceNumber,
     string InvoiceStatus,
     decimal InvoiceTotalAmount);
+
+public sealed record InternalAdminInvoiceResponse(
+    Guid Id,
+    Guid TenantId,
+    Guid QuoteId,
+    Guid UserId,
+    string InvoiceNumber,
+    string QuoteNumber,
+    string ContactName,
+    string ContactEmail,
+    string ContactCompany,
+    decimal Amount,
+    decimal TaxPercent,
+    decimal TaxAmount,
+    decimal TotalAmount,
+    DateTime DueDateUtc,
+    string Status,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);
+
+public sealed record UpdateInternalAdminInvoiceStatusRequest(string Status);
+
+public sealed record InternalAdminTenantBillingResponse(
+    decimal TotalMrr,
+    decimal TotalArr,
+    int ActiveSubscriptions,
+    int TrialAccounts,
+    int PastDueAccounts,
+    IReadOnlyCollection<InternalAdminTenantBillingItemResponse> Items);
+
+public sealed record InternalAdminTenantBillingItemResponse(
+    Guid TenantId,
+    string TenantName,
+    string Plan,
+    string Status,
+    decimal Mrr,
+    DateTime NextBillingAtUtc,
+    string PaymentMethod,
+    int InvoiceCount,
+    decimal TotalInvoiced,
+    decimal TotalPaid,
+    decimal OutstandingAmount,
+    decimal OverdueAmount);
+
+public sealed record InternalAdminRevenueAnalyticsResponse(
+    decimal CurrentMrr,
+    decimal MrrGrowthPercent,
+    decimal CurrentArr,
+    decimal Arpu,
+    decimal ChurnRatePercent,
+    decimal NetRevenueRetentionPercent,
+    IReadOnlyCollection<InternalAdminRevenuePointResponse> Timeline,
+    IReadOnlyCollection<InternalAdminPlanDistributionResponse> PlanDistribution);
+
+public sealed record InternalAdminRevenuePointResponse(
+    string Month,
+    decimal Mrr,
+    decimal Arr,
+    decimal NewMrr,
+    decimal Churned);
+
+public sealed record InternalAdminPlanDistributionResponse(
+    string Plan,
+    int Count,
+    decimal Percent);
+
+public sealed record InternalBillingInvoiceSnapshot(
+    Guid TenantId,
+    decimal TotalAmount,
+    string Status,
+    DateTime DueDateUtc,
+    DateTime CreatedAtUtc);

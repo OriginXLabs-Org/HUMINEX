@@ -12,6 +12,10 @@ const ADMIN_ROLES = new Set(["admin", "super_admin", "director"]);
 const INTERNAL_ADMIN_EMAIL = "originxlabs@gmail.com";
 const STRONG_AUTH_METHODS = new Set(["mfa", "fido", "rsa", "otp", "wia", "hwk", "x509"]);
 const ADMIN_AUDIT_STORAGE_KEY = "huminex_admin_auth_audit";
+const ADMIN_REDIRECT_URI =
+  (import.meta.env.VITE_AZURE_AD_ADMIN_REDIRECT_URI as string | undefined)
+  ?? (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined)
+  ?? window.location.origin;
 const LOCAL_BYPASS_ENABLED =
   import.meta.env.DEV === true &&
   ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
@@ -93,6 +97,7 @@ const AdminAuth = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
 
     try {
@@ -109,6 +114,8 @@ const AdminAuth = () => {
         : await platform.auth.signInWithPassword({
             email: INTERNAL_ADMIN_EMAIL,
             password: "microsoft-entra",
+            portal: "admin",
+            redirectUri: ADMIN_REDIRECT_URI,
           });
       const { data, error } = loginResult;
 

@@ -12,7 +12,11 @@ const hostedFallbackApiScope = isHostedOnHuminexDomain
 const tenantId = (import.meta.env.VITE_AZURE_AD_TENANT_ID as string | undefined) ?? hostedFallbackTenantId;
 const clientId = (import.meta.env.VITE_AZURE_AD_CLIENT_ID as string | undefined) ?? hostedFallbackClientId;
 const apiScope = (import.meta.env.VITE_AZURE_AD_API_SCOPE as string | undefined) ?? hostedFallbackApiScope;
-const redirectUri = (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined) ?? window.location.origin;
+const defaultRedirectUri = (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined) ?? window.location.origin;
+const adminRedirectUri = (import.meta.env.VITE_AZURE_AD_ADMIN_REDIRECT_URI as string | undefined) ?? defaultRedirectUri;
+const tenantRedirectUri = (import.meta.env.VITE_AZURE_AD_TENANT_REDIRECT_URI as string | undefined) ?? defaultRedirectUri;
+
+export type EntraPortal = "admin" | "tenant" | "default";
 
 function isConfigured(value: string | undefined): boolean {
   if (!value) return false;
@@ -27,7 +31,7 @@ export function getEntraConfigError(): string | null {
   if (!isConfigured(tenantId)) missing.push("VITE_AZURE_AD_TENANT_ID");
   if (!isConfigured(clientId)) missing.push("VITE_AZURE_AD_CLIENT_ID");
   if (!isConfigured(apiScope)) missing.push("VITE_AZURE_AD_API_SCOPE");
-  if (!isConfigured(redirectUri)) missing.push("VITE_AZURE_AD_REDIRECT_URI");
+  if (!isConfigured(defaultRedirectUri)) missing.push("VITE_AZURE_AD_REDIRECT_URI");
 
   if (missing.length === 0) {
     return null;
@@ -44,7 +48,7 @@ export const msalConfig = {
   auth: {
     clientId: clientId ?? "",
     authority: `https://login.microsoftonline.com/${tenantId ?? "common"}`,
-    redirectUri,
+    redirectUri: defaultRedirectUri,
     postLogoutRedirectUri: window.location.origin,
   },
   cache: {
@@ -76,6 +80,74 @@ function getInstance(): PublicClientApplication {
   return instance;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isInteractionStatusKey(key: string): boolean {
+  return key.toLowerCase().includes("interaction.status");
+}
+
+function clearInteractionKeys(storage: Storage): void {
+  const keys: string[] = [];
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (key && isInteractionStatusKey(key)) {
+      keys.push(key);
+    }
+  }
+
+  for (const key of keys) {
+    storage.removeItem(key);
+  }
+}
+
+function hasInteractionKeys(storage: Storage): boolean {
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (key && isInteractionStatusKey(key)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasAnyInteractionInProgress(): boolean {
+  try {
+    return hasInteractionKeys(window.sessionStorage) || hasInteractionKeys(window.localStorage);
+  } catch {
+    return false;
+  }
+}
+
+function clearAnyInteractionInProgress(): void {
+  try {
+    clearInteractionKeys(window.sessionStorage);
+    clearInteractionKeys(window.localStorage);
+  } catch {
+    // Best effort; continue.
+  }
+}
+
+async function waitForInteractionToSettle(timeoutMs = 4000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (!hasAnyInteractionInProgress()) {
+      return true;
+    }
+    await sleep(200);
+  }
+
+  return !hasAnyInteractionInProgress();
+}
+
+function resolveRedirectUri(portal: EntraPortal): string {
+  if (portal === "admin") return adminRedirectUri;
+  if (portal === "tenant") return tenantRedirectUri;
+  return defaultRedirectUri;
+}
+
 export async function getMsalInstance(): Promise<PublicClientApplication> {
   const msal = getInstance();
   if (!initialized) {
@@ -85,7 +157,10 @@ export async function getMsalInstance(): Promise<PublicClientApplication> {
   return msal;
 }
 
-export async function loginWithMicrosoft(loginHint?: string): Promise<AuthenticationResult> {
+export async function loginWithMicrosoft(
+  loginHint?: string,
+  options?: { portal?: EntraPortal; redirectUri?: string }
+): Promise<AuthenticationResult> {
   if (loginInFlight) {
     return loginInFlight;
   }
@@ -97,7 +172,12 @@ export async function loginWithMicrosoft(loginHint?: string): Promise<Authentica
   }
 
   const msal = await getMsalInstance();
-  const request = loginHint ? { ...loginRequest, loginHint } : loginRequest;
+  const portal = options?.portal ?? "default";
+  const request: PopupRequest = {
+    ...loginRequest,
+    redirectUri: options?.redirectUri ?? resolveRedirectUri(portal),
+    ...(loginHint ? { loginHint } : {}),
+  };
     let authResult: AuthenticationResult;
 
     try {
@@ -111,9 +191,24 @@ export async function loginWithMicrosoft(loginHint?: string): Promise<Authentica
             account: existingAccount,
           });
         }
-        throw new Error("Microsoft sign-in is already in progress. Close the existing sign-in popup and retry.");
+
+        const settled = await waitForInteractionToSettle();
+        if (!settled) {
+          clearAnyInteractionInProgress();
+          await sleep(250);
+        }
+
+        try {
+          authResult = await msal.loginPopup(request);
+        } catch (retryError) {
+          if (isInteractionInProgressError(retryError)) {
+            throw new Error("Microsoft sign-in is still in progress. Please wait a moment and try again.");
+          }
+          throw retryError;
+        }
+      } else {
+        throw error;
       }
-      throw error;
     }
 
     if (authResult.account) {

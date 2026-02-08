@@ -16,7 +16,9 @@ Copy `Frontend/.env.example` to `Frontend/.env.local` and configure:
 - `VITE_AZURE_AD_TENANT_ID`
 - `VITE_AZURE_AD_CLIENT_ID` (SPA app registration)
 - `VITE_AZURE_AD_API_SCOPE` (API app scope, e.g. `api://<api-app-id>/access_as_user`)
-- `VITE_AZURE_AD_REDIRECT_URI`
+- `VITE_AZURE_AD_REDIRECT_URI` (shared fallback; defaults to origin)
+- `VITE_AZURE_AD_ADMIN_REDIRECT_URI` (recommended: `/admin/login`)
+- `VITE_AZURE_AD_TENANT_REDIRECT_URI` (recommended: `/tenant/login`)
 
 Run frontend:
 

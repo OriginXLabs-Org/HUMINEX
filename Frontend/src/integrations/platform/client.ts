@@ -210,7 +210,12 @@ const auth = {
     const session = readStoredSession();
     return { data: { user: session?.user ?? null }, error: null };
   },
-  async signInWithPassword(payload: { email: string; password: string }) {
+  async signInWithPassword(payload: {
+    email: string;
+    password: string;
+    portal?: "admin" | "tenant" | "default";
+    redirectUri?: string;
+  }) {
     if (
       LOCAL_BYPASS_ENABLED &&
       payload.email.trim().toLowerCase() === INTERNAL_ADMIN_EMAIL
@@ -222,7 +227,10 @@ const auth = {
     }
 
     try {
-      const result = await loginWithMicrosoft(payload.email);
+      const result = await loginWithMicrosoft(payload.email, {
+        portal: payload.portal ?? "default",
+        redirectUri: payload.redirectUri,
+      });
       const claims = (result.idTokenClaims ?? {}) as Record<string, unknown>;
       const authMethods = normalizeStringArrayClaim(claims.amr);
       const authStrength = typeof claims.acrs === "string"

@@ -27,6 +27,10 @@ const loginSchema = z.object({
   email: z.string().email("Please enter a valid work email address"),
 });
 const INTERNAL_ADMIN_EMAIL = "originxlabs@gmail.com";
+const TENANT_REDIRECT_URI =
+  (import.meta.env.VITE_AZURE_AD_TENANT_REDIRECT_URI as string | undefined)
+  ?? (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined)
+  ?? window.location.origin;
 
 const TenantAuth = () => {
   const [loading, setLoading] = useState(false);
@@ -64,6 +68,7 @@ const TenantAuth = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
 
     try {
@@ -85,6 +90,8 @@ const TenantAuth = () => {
       const { error } = await platform.auth.signInWithPassword({
         email: validated.email,
         password: "microsoft-entra",
+        portal: "tenant",
+        redirectUri: TENANT_REDIRECT_URI,
       });
 
       if (error) {
