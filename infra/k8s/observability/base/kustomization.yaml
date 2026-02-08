@@ -15,5 +15,4 @@ resources:
   - prometheus-deploy.yaml
   - grafana-datasources.yaml
   - grafana-deploy.yaml
-  - ingress-internal.yaml
-
+  - grafana-internal-lb.yaml
