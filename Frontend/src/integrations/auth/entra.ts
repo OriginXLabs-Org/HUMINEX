@@ -85,6 +85,11 @@ export const msalConfig = {
     cacheLocation: BrowserCacheLocation.LocalStorage,
     storeAuthStateInCookie: false,
   },
+  system: {
+    // Increase popup hash wait to reduce false timeouts on slower network/device conditions.
+    windowHashTimeout: 120000,
+    iframeHashTimeout: 120000,
+  },
 };
 
 export const loginRequest: PopupRequest = {
@@ -318,6 +323,12 @@ export async function loginWithMicrosoft(
         }
       } else {
         const message = String((error as { message?: string })?.message ?? "");
+        const normalized = message.toLowerCase();
+        if (normalized.includes("timed_out") || normalized.includes("monitor_window_timeout")) {
+          // Fallback to redirect flow when popup transport is unstable.
+          await startMicrosoftRedirectLogin(loginHint, { portal, redirectUri: resolveRedirectUri(portal) });
+          throw new Error("entra_redirect_in_progress");
+        }
         if (message.toLowerCase().includes("block_nested_popups")) {
           throw new Error("Blocked nested popup detected. Retry login from the main browser tab.");
         }

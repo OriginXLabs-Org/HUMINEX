@@ -125,6 +125,12 @@ const AdminAuth = () => {
         return;
       }
 
+      if ((data as { redirecting?: boolean } | null)?.redirecting) {
+        await captureAdminAudit("attempt", "redirect_login_in_progress");
+        toast.info("Redirecting to Microsoft sign-in...");
+        return;
+      }
+
       const signedInEmail = (data?.user?.email ?? "").toLowerCase();
       if (signedInEmail !== INTERNAL_ADMIN_EMAIL) {
         await captureAdminAudit("blocked", "signed_in_email_not_internal");
