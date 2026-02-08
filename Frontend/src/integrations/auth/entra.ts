@@ -16,23 +16,29 @@ const defaultRedirectUri = (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string
 const adminRedirectUri = (import.meta.env.VITE_AZURE_AD_ADMIN_REDIRECT_URI as string | undefined) ?? defaultRedirectUri;
 const tenantRedirectUri = (import.meta.env.VITE_AZURE_AD_TENANT_REDIRECT_URI as string | undefined) ?? defaultRedirectUri;
 const configuredPopupRedirectUri = import.meta.env.VITE_AZURE_AD_POPUP_REDIRECT_URI as string | undefined;
+const defaultPopupCallbackPath = "/auth/popup-callback.html";
 
 function resolveSafePopupRedirectUri(): string {
-  const fallback = window.location.origin;
+  const fallback = new URL(defaultPopupCallbackPath, window.location.origin).toString();
   const candidate = (configuredPopupRedirectUri ?? fallback).trim();
 
   try {
     const parsed = new URL(candidate, window.location.origin);
     const normalizedPath = parsed.pathname.toLowerCase();
 
-    if (normalizedPath === "/admin/login" || normalizedPath === "/tenant/login") {
-      console.warn("Ignoring unsafe popup redirect URI pointed at login page; using site origin for popup callback.");
+    if (
+      normalizedPath === "/" ||
+      normalizedPath === "/index.html" ||
+      normalizedPath === "/admin/login" ||
+      normalizedPath === "/tenant/login"
+    ) {
+      console.warn("Ignoring unsafe popup redirect URI; using dedicated popup callback page.");
       return fallback;
     }
 
     return parsed.toString();
   } catch {
-    console.warn("Invalid VITE_AZURE_AD_POPUP_REDIRECT_URI. Falling back to site origin for popup callback.");
+    console.warn("Invalid VITE_AZURE_AD_POPUP_REDIRECT_URI. Falling back to dedicated popup callback page.");
     return fallback;
   }
 }

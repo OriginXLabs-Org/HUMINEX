@@ -19,6 +19,7 @@ Copy `Frontend/.env.example` to `Frontend/.env.local` and configure:
 - `VITE_AZURE_AD_REDIRECT_URI` (shared fallback; defaults to origin)
 - `VITE_AZURE_AD_ADMIN_REDIRECT_URI` (recommended: `/admin/login`)
 - `VITE_AZURE_AD_TENANT_REDIRECT_URI` (recommended: `/tenant/login`)
+- `VITE_AZURE_AD_POPUP_REDIRECT_URI` (recommended: `/auth/popup-callback.html`, do not point to login routes or `/`)
 
 Run frontend:
 

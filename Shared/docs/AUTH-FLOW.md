@@ -23,6 +23,9 @@ HUMINEX uses **Microsoft Entra ID** for authentication.
 - Redirect URIs (SPA platform):
   - `http://localhost:8080`
   - `https://www.gethuminex.com`
+  - `https://www.gethuminex.com/admin/login`
+  - `https://www.gethuminex.com/tenant/login`
+  - `https://www.gethuminex.com/auth/popup-callback.html`
 
 ## 3. Where User Is Created
 Create/invite users in **Microsoft Entra Admin Center**:
@@ -43,6 +46,7 @@ VITE_AZURE_AD_TENANT_ID="798c33e1-22be-463e-be2f-2920646fa78c"
 VITE_AZURE_AD_CLIENT_ID="8585bece-66ed-405c-bfa5-568689345f91"
 VITE_AZURE_AD_API_SCOPE="api://40efefe7-8bc1-4452-9261-8f1973a0b5fa/access_as_user"
 VITE_AZURE_AD_REDIRECT_URI="http://localhost:8080"
+VITE_AZURE_AD_POPUP_REDIRECT_URI="http://localhost:8080/auth/popup-callback.html"
 ```
 
 For production, `VITE_AZURE_AD_REDIRECT_URI` should be your production frontend origin.
