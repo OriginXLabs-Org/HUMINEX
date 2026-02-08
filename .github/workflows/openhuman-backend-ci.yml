@@ -1,0 +1,59 @@
+name: OpenHuman Backend CI
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'openhuman/**'
+      - '.github/workflows/openhuman-backend-ci.yml'
+  pull_request:
+    paths:
+      - 'openhuman/**'
+      - '.github/workflows/openhuman-backend-ci.yml'
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Detect OpenHuman backend projects
+        id: detect
+        run: |
+          count=$(find openhuman/backend -name '*.csproj' | wc -l | tr -d ' ')
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+
+      - name: Build OpenHuman backend
+        if: steps.detect.outputs.count != '0'
+        run: |
+          mapfile -t projects < <(find openhuman/backend -name '*.csproj')
+          for project in "${projects[@]}"; do
+            echo "Restoring $project"
+            dotnet restore "$project"
+            echo "Building $project"
+            dotnet build "$project" --configuration Release --no-restore
+          done
+
+      - name: Test OpenHuman backend
+        if: steps.detect.outputs.count != '0'
+        run: |
+          mapfile -t test_projects < <(find openhuman/backend -name '*Test*.csproj' -o -name '*.Tests.csproj')
+          if [ "${#test_projects[@]}" -eq 0 ]; then
+            echo "No OpenHuman test projects detected yet."
+            exit 0
+          fi
+
+          for project in "${test_projects[@]}"; do
+            dotnet test "$project" --configuration Release --no-build
+          done
+
+      - name: Skeleton status
+        if: steps.detect.outputs.count == '0'
+        run: |
+          echo "OpenHuman backend skeleton is present; no .csproj projects found yet."

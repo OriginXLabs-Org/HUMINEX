@@ -10,6 +10,7 @@ on:
       - HUMINEX Backend Image Push
       - HUMINEX CodeQL
       - HUMINEX E2E Playwright
+      - OpenHuman Backend CI
       - Frontend CI
       - HUMINEX Infra Deploy
     types:
@@ -82,6 +83,7 @@ jobs:
             "backend-ci.yml|Backend CI"
             "backend-image-push.yml|Backend Image Push"
             "e2e-playwright.yml|E2E Playwright"
+            "openhuman-backend-ci.yml|OpenHuman Backend CI"
             "codeql.yml|CodeQL"
             "infra-deploy.yml|Infra Deploy"
           )

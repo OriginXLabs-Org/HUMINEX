@@ -59,15 +59,13 @@ jobs:
           backend_conclusion="$(latest_conclusion backend-ci.yml)"
           e2e_conclusion="$(latest_conclusion e2e-playwright.yml)"
           infra_conclusion="$(latest_conclusion infra-deploy.yml)"
+          openhuman_conclusion="$(latest_conclusion openhuman-backend-ci.yml)"
 
           frontend_mark="$(indicator "$frontend_conclusion")"
           backend_mark="$(indicator "$backend_conclusion")"
           e2e_mark="$(indicator "$e2e_conclusion")"
           infra_mark="$(indicator "$infra_conclusion")"
-
-          # OpenHuman currently has repository skeleton and UI references, no dedicated CI workflow yet.
-          openhuman_mark="🟡"
-          openhuman_state="in_progress"
+          openhuman_mark="$(indicator "$openhuman_conclusion")"
 
           blocks='[]'
 
@@ -96,7 +94,7 @@ jobs:
             --arg bm "$backend_mark" --arg bs "$backend_conclusion" \
             --arg em "$e2e_mark" --arg es "$e2e_conclusion" \
             --arg im "$infra_mark" --arg is "$infra_conclusion" \
-            --arg om "$openhuman_mark" --arg os "$openhuman_state" '
+            --arg om "$openhuman_mark" --arg os "$openhuman_conclusion" '
             . + [
               {"type":"section","text":{"type":"mrkdwn","text":("*Tab 1: Project Tracker*\n" +
                 $fm + " Frontend: *" + $fs + "*\n" +

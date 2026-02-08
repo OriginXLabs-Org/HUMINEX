@@ -251,6 +251,110 @@ export type InternalAdminRevenueAnalyticsResponse = {
   planDistribution: InternalAdminPlanDistributionResponse[];
 };
 
+export type InternalAdminAiWorkflowResponse = {
+  id: string;
+  name: string;
+  totalRuns: number;
+  successRatePercent: number;
+  status: string;
+  lastRunAtUtc: string;
+};
+
+export type InternalAdminAiActivityResponse = {
+  id: string;
+  kind: string;
+  actorEmail: string;
+  message: string;
+  status: string;
+  latencyMs?: number | null;
+  occurredAtUtc: string;
+};
+
+export type InternalAdminAiDashboardResponse = {
+  totalQueries: number;
+  successfulQueries: number;
+  failedQueries: number;
+  avgResponseTimeSeconds: number;
+  activeWorkflows: number;
+  estimatedCostSavings: number;
+  workflows: InternalAdminAiWorkflowResponse[];
+  recentActivity: InternalAdminAiActivityResponse[];
+};
+
+export type InternalAdminAutomationWorkflowResponse = {
+  id: string;
+  name: string;
+  trigger: string;
+  status: string;
+  totalRuns: number;
+  successRatePercent: number;
+  avgDurationMs: number;
+  lastRunAtUtc: string;
+};
+
+export type InternalAdminAutomationExecutionResponse = {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: string;
+  triggeredBy: string;
+  resourceType: string;
+  resourceId: string;
+  durationMs?: number | null;
+  startedAtUtc: string;
+};
+
+export type InternalAdminScheduledJobResponse = {
+  id: string;
+  name: string;
+  schedule: string;
+  nextRunAtUtc: string;
+  status: string;
+};
+
+export type InternalAdminAutomationLogsResponse = {
+  activeWorkflows: number;
+  totalExecutions: number;
+  successfulExecutions: number;
+  failedExecutions: number;
+  workflows: InternalAdminAutomationWorkflowResponse[];
+  executions: InternalAdminAutomationExecutionResponse[];
+  scheduledJobs: InternalAdminScheduledJobResponse[];
+};
+
+export type InternalAdminFeatureFlagResponse = {
+  id: string;
+  key: string;
+  name: string;
+  type: string;
+  status: string;
+  rolloutPercent: number;
+  updatedAtUtc: string;
+  targetingType: string;
+};
+
+export type InternalAdminAbTestVariantResponse = {
+  name: string;
+  conversions: number;
+};
+
+export type InternalAdminAbTestResponse = {
+  id: string;
+  name: string;
+  status: string;
+  variants: InternalAdminAbTestVariantResponse[];
+  visitors: number;
+  winner: string;
+};
+
+export type InternalAdminFeatureFlagsResponse = {
+  totalFlags: number;
+  enabledFlags: number;
+  partialFlags: number;
+  flags: InternalAdminFeatureFlagResponse[];
+  abTests: InternalAdminAbTestResponse[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api/v1";
 const SESSION_STORAGE_KEY = "huminex_api_session";
 
@@ -436,6 +540,24 @@ export const huminexApi = {
   getInternalRevenueAnalytics: (months = 12, accessToken?: string) =>
     apiRequest<InternalAdminRevenueAnalyticsResponse>(
       `/admin/internal/revenue-analytics?months=${months}`,
+      {},
+      accessToken
+    ),
+  getInternalAiDashboard: (limit = 300, accessToken?: string) =>
+    apiRequest<InternalAdminAiDashboardResponse>(
+      `/admin/internal/ai-dashboard?limit=${limit}`,
+      {},
+      accessToken
+    ),
+  getInternalAutomationLogs: (limit = 500, accessToken?: string) =>
+    apiRequest<InternalAdminAutomationLogsResponse>(
+      `/admin/internal/automation-logs?limit=${limit}`,
+      {},
+      accessToken
+    ),
+  getInternalFeatureFlags: (accessToken?: string) =>
+    apiRequest<InternalAdminFeatureFlagsResponse>(
+      "/admin/internal/feature-flags",
       {},
       accessToken
     ),

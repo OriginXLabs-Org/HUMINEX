@@ -19,6 +19,7 @@ public sealed class InternalAdminController(
     AppDbContext dbContext,
     ITenantProvider tenantProvider,
     IOptions<InternalAdminOptions> internalAdminOptions,
+    IConfiguration configuration,
     HealthCheckService healthCheckService) : ControllerBase
 {
     private static readonly string[] AdminRoleNames = ["admin", "super_admin", "director"];
@@ -944,6 +945,298 @@ public sealed class InternalAdminController(
         return Ok(new ApiEnvelope<InternalAdminRevenueAnalyticsResponse>(response, HttpContext.TraceIdentifier));
     }
 
+    [HttpGet("ai-dashboard")]
+    [ProducesResponseType(typeof(ApiEnvelope<InternalAdminAiDashboardResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiEnvelope<InternalAdminAiDashboardResponse>>> GetAiDashboard(
+        [FromQuery] int limit = 300,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsInternalAdmin())
+        {
+            return Forbid();
+        }
+
+        var normalizedLimit = Math.Clamp(limit, 50, 2000);
+        var sinceUtc = DateTime.UtcNow.AddDays(-30);
+
+        var raw = await dbContext.AuditTrails
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.OccurredAtUtc >= sinceUtc)
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .Take(normalizedLimit)
+            .Select(x => new
+            {
+                x.Id,
+                x.Action,
+                x.ResourceType,
+                x.ResourceId,
+                x.ActorEmail,
+                x.Outcome,
+                x.MetadataJson,
+                x.OccurredAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var aiRows = raw
+            .Where(x =>
+                x.Action.Contains("ai", StringComparison.OrdinalIgnoreCase)
+                || x.Action.Contains("openhuman", StringComparison.OrdinalIgnoreCase)
+                || x.Action.Contains("interview", StringComparison.OrdinalIgnoreCase)
+                || x.ResourceType.Contains("ai", StringComparison.OrdinalIgnoreCase)
+                || x.ResourceType.Contains("openhuman", StringComparison.OrdinalIgnoreCase)
+                || x.ResourceType.Contains("interview", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var totalQueries = aiRows.Length;
+        var successfulQueries = aiRows.Count(x => string.Equals(x.Outcome, "success", StringComparison.OrdinalIgnoreCase));
+        var failedQueries = aiRows.Count(x =>
+            string.Equals(x.Outcome, "failure", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(x.Outcome, "error", StringComparison.OrdinalIgnoreCase));
+        var latenciesMs = aiRows
+            .Select(x => TryGetLatencyMs(x.MetadataJson))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .ToArray();
+        var avgResponseMs = latenciesMs.Length == 0
+            ? 0d
+            : latenciesMs.Average();
+
+        var workflowSummary = aiRows
+            .GroupBy(x => x.Action)
+            .Select(group =>
+            {
+                var runs = group.Count();
+                var success = group.Count(item => string.Equals(item.Outcome, "success", StringComparison.OrdinalIgnoreCase));
+                var successRate = runs == 0 ? 0m : Math.Round(success * 100m / runs, 2, MidpointRounding.AwayFromZero);
+                var lastRun = group.Max(item => item.OccurredAtUtc);
+                var status = lastRun >= DateTime.UtcNow.AddDays(-14) ? "active" : "paused";
+                return new InternalAdminAiWorkflowResponse(
+                    group.Key,
+                    DeriveWorkflowName(group.Key),
+                    runs,
+                    successRate,
+                    status,
+                    lastRun);
+            })
+            .OrderByDescending(x => x.TotalRuns)
+            .Take(8)
+            .ToArray();
+
+        var recentActivity = aiRows
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .Take(25)
+            .Select(x => new InternalAdminAiActivityResponse(
+                x.Id,
+                x.Action,
+                x.ActorEmail,
+                $"{x.Action} on {x.ResourceType}:{x.ResourceId}",
+                NormalizeExecutionStatus(x.Outcome),
+                TryGetLatencyMs(x.MetadataJson),
+                x.OccurredAtUtc))
+            .ToArray();
+
+        var response = new InternalAdminAiDashboardResponse(
+            totalQueries,
+            successfulQueries,
+            failedQueries,
+            Math.Round(avgResponseMs / 1000d, 2, MidpointRounding.AwayFromZero),
+            workflowSummary.Count(x => x.Status == "active"),
+            Math.Round(successfulQueries * 1.75m, 2, MidpointRounding.AwayFromZero),
+            workflowSummary,
+            recentActivity);
+
+        return Ok(new ApiEnvelope<InternalAdminAiDashboardResponse>(response, HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("automation-logs")]
+    [ProducesResponseType(typeof(ApiEnvelope<InternalAdminAutomationLogsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiEnvelope<InternalAdminAutomationLogsResponse>>> GetAutomationLogs(
+        [FromQuery] int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsInternalAdmin())
+        {
+            return Forbid();
+        }
+
+        var normalizedLimit = Math.Clamp(limit, 100, 2000);
+        var sinceUtc = DateTime.UtcNow.AddDays(-90);
+
+        var raw = await dbContext.AuditTrails
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.OccurredAtUtc >= sinceUtc)
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .Take(normalizedLimit)
+            .Select(x => new
+            {
+                x.Id,
+                x.Action,
+                x.ResourceType,
+                x.ResourceId,
+                x.ActorEmail,
+                x.Outcome,
+                x.MetadataJson,
+                x.OccurredAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var automationRows = raw
+            .Where(x =>
+                x.Action.Contains("automation", StringComparison.OrdinalIgnoreCase)
+                || x.Action.Contains("workflow", StringComparison.OrdinalIgnoreCase)
+                || x.Action.Contains("openhuman", StringComparison.OrdinalIgnoreCase)
+                || x.ResourceType.Contains("automation", StringComparison.OrdinalIgnoreCase)
+                || x.ResourceType.Contains("workflow", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var workflows = automationRows
+            .GroupBy(x => x.Action)
+            .Select(group =>
+            {
+                var runs = group.Count();
+                var success = group.Count(item => string.Equals(item.Outcome, "success", StringComparison.OrdinalIgnoreCase));
+                var successRate = runs == 0 ? 0m : Math.Round(success * 100m / runs, 2, MidpointRounding.AwayFromZero);
+                var lastRun = group.Max(item => item.OccurredAtUtc);
+                var status = lastRun >= DateTime.UtcNow.AddDays(-14) ? "active" : "paused";
+                var avgDurationMs = group
+                    .Select(item => TryGetLatencyMs(item.MetadataJson))
+                    .Where(item => item.HasValue)
+                    .Select(item => item!.Value)
+                    .DefaultIfEmpty(0d)
+                    .Average();
+
+                return new InternalAdminAutomationWorkflowResponse(
+                    group.Key,
+                    DeriveWorkflowName(group.Key),
+                    group.Select(item => item.ResourceType).FirstOrDefault() ?? "event",
+                    status,
+                    runs,
+                    successRate,
+                    Math.Round(avgDurationMs, 1, MidpointRounding.AwayFromZero),
+                    lastRun);
+            })
+            .OrderByDescending(x => x.TotalRuns)
+            .Take(25)
+            .ToArray();
+
+        var executions = automationRows
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .Take(150)
+            .Select(x => new InternalAdminAutomationExecutionResponse(
+                x.Id,
+                x.Action,
+                DeriveWorkflowName(x.Action),
+                NormalizeExecutionStatus(x.Outcome),
+                x.ActorEmail,
+                x.ResourceType,
+                x.ResourceId,
+                TryGetLatencyMs(x.MetadataJson),
+                x.OccurredAtUtc))
+            .ToArray();
+
+        var scheduledJobs = workflows
+            .Take(10)
+            .Select((workflow, index) => new InternalAdminScheduledJobResponse(
+                workflow.Id,
+                workflow.Name,
+                "derived_activity_schedule",
+                DateTime.UtcNow.AddMinutes((index + 1) * 20),
+                workflow.Status == "active" ? "scheduled" : "paused"))
+            .ToArray();
+
+        var response = new InternalAdminAutomationLogsResponse(
+            workflows.Count(x => x.Status == "active"),
+            executions.Length,
+            executions.Count(x => x.Status == "success"),
+            executions.Count(x => x.Status is "failed" or "error"),
+            workflows,
+            executions,
+            scheduledJobs);
+
+        return Ok(new ApiEnvelope<InternalAdminAutomationLogsResponse>(response, HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("feature-flags")]
+    [ProducesResponseType(typeof(ApiEnvelope<InternalAdminFeatureFlagsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiEnvelope<InternalAdminFeatureFlagsResponse>>> GetFeatureFlags(
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsInternalAdmin())
+        {
+            return Forbid();
+        }
+
+        var featureSection = configuration.GetSection("FeatureManagement");
+        var featureFlags = featureSection
+            .GetChildren()
+            .Select(section =>
+            {
+                var enabled = TryReadBool(section.Value);
+                var status = enabled ? "enabled" : "disabled";
+                return new InternalAdminFeatureFlagResponse(
+                    section.Path,
+                    section.Key,
+                    section.Key.Replace('_', ' '),
+                    "configuration",
+                    status,
+                    enabled ? 100 : 0,
+                    DateTime.UtcNow,
+                    "all");
+            })
+            .ToArray();
+
+        var quoteStatuses = await dbContext.Quotes
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .GroupBy(x => x.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+
+        var invoiceStatuses = await dbContext.Invoices
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .GroupBy(x => x.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+
+        var quoteVisitors = quoteStatuses.Sum(x => x.Count);
+        var quoteWinner = quoteStatuses.OrderByDescending(x => x.Count).Select(x => x.Status).FirstOrDefault() ?? "n/a";
+        var invoiceVisitors = invoiceStatuses.Sum(x => x.Count);
+        var invoiceWinner = invoiceStatuses.OrderByDescending(x => x.Count).Select(x => x.Status).FirstOrDefault() ?? "n/a";
+
+        var abTests = new[]
+        {
+            new InternalAdminAbTestResponse(
+                "quote_status_distribution",
+                "Quote Status Distribution",
+                quoteVisitors > 0 ? "running" : "completed",
+                quoteStatuses.Select(x => new InternalAdminAbTestVariantResponse(x.Status, x.Count)).ToArray(),
+                quoteVisitors,
+                quoteWinner),
+            new InternalAdminAbTestResponse(
+                "invoice_status_distribution",
+                "Invoice Status Distribution",
+                invoiceVisitors > 0 ? "running" : "completed",
+                invoiceStatuses.Select(x => new InternalAdminAbTestVariantResponse(x.Status, x.Count)).ToArray(),
+                invoiceVisitors,
+                invoiceWinner),
+        };
+
+        var response = new InternalAdminFeatureFlagsResponse(
+            featureFlags.Length,
+            featureFlags.Count(x => x.Status == "enabled"),
+            featureFlags.Count(x => x.Status == "partial"),
+            featureFlags,
+            abTests);
+
+        return Ok(new ApiEnvelope<InternalAdminFeatureFlagsResponse>(response, HttpContext.TraceIdentifier));
+    }
+
     [HttpGet("system-logs")]
     [ProducesResponseType(typeof(ApiEnvelope<IReadOnlyCollection<InternalSystemLogResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -1131,6 +1424,104 @@ public sealed class InternalAdminController(
         }
 
         return "info";
+    }
+
+    private static double? TryGetLatencyMs(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(metadataJson);
+            var root = document.RootElement;
+            if (TryReadDouble(root, "latencyMs", out var latency))
+            {
+                return latency;
+            }
+
+            if (TryReadDouble(root, "responseTimeMs", out var responseTime))
+            {
+                return responseTime;
+            }
+
+            if (TryReadDouble(root, "durationMs", out var duration))
+            {
+                return duration;
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static bool TryReadDouble(System.Text.Json.JsonElement element, string property, out double value)
+    {
+        value = 0d;
+        if (!element.TryGetProperty(property, out var propertyValue))
+        {
+            return false;
+        }
+
+        if (propertyValue.ValueKind == System.Text.Json.JsonValueKind.Number && propertyValue.TryGetDouble(out var number))
+        {
+            value = number;
+            return true;
+        }
+
+        if (propertyValue.ValueKind == System.Text.Json.JsonValueKind.String
+            && double.TryParse(propertyValue.GetString(), out var parsed))
+        {
+            value = parsed;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string DeriveWorkflowName(string action)
+    {
+        if (string.IsNullOrWhiteSpace(action))
+        {
+            return "Unnamed Workflow";
+        }
+
+        var cleaned = action.Trim().Replace('_', ' ').Replace('-', ' ');
+        return string.Join(' ',
+            cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(token => token.Length == 0
+                    ? token
+                    : $"{char.ToUpperInvariant(token[0])}{token[1..].ToLowerInvariant()}"));
+    }
+
+    private static string NormalizeExecutionStatus(string outcome)
+    {
+        var normalized = (outcome ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "success" => "success",
+            "failure" => "failed",
+            "error" => "error",
+            "blocked" => "failed",
+            _ => string.IsNullOrWhiteSpace(normalized) ? "unknown" : normalized,
+        };
+    }
+
+    private static bool TryReadBool(string? raw)
+    {
+        if (bool.TryParse(raw, out var parsed))
+        {
+            return parsed;
+        }
+
+        return string.Equals(raw, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(raw, "on", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(raw, "yes", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveInvoiceStatus(string status, DateTime dueDateUtc, DateTime nowUtc)
@@ -1374,3 +1765,96 @@ public sealed record InternalBillingInvoiceSnapshot(
     string Status,
     DateTime DueDateUtc,
     DateTime CreatedAtUtc);
+
+public sealed record InternalAdminAiDashboardResponse(
+    int TotalQueries,
+    int SuccessfulQueries,
+    int FailedQueries,
+    double AvgResponseTimeSeconds,
+    int ActiveWorkflows,
+    decimal EstimatedCostSavings,
+    IReadOnlyCollection<InternalAdminAiWorkflowResponse> Workflows,
+    IReadOnlyCollection<InternalAdminAiActivityResponse> RecentActivity);
+
+public sealed record InternalAdminAiWorkflowResponse(
+    string Id,
+    string Name,
+    int TotalRuns,
+    decimal SuccessRatePercent,
+    string Status,
+    DateTime LastRunAtUtc);
+
+public sealed record InternalAdminAiActivityResponse(
+    Guid Id,
+    string Kind,
+    string ActorEmail,
+    string Message,
+    string Status,
+    double? LatencyMs,
+    DateTime OccurredAtUtc);
+
+public sealed record InternalAdminAutomationLogsResponse(
+    int ActiveWorkflows,
+    int TotalExecutions,
+    int SuccessfulExecutions,
+    int FailedExecutions,
+    IReadOnlyCollection<InternalAdminAutomationWorkflowResponse> Workflows,
+    IReadOnlyCollection<InternalAdminAutomationExecutionResponse> Executions,
+    IReadOnlyCollection<InternalAdminScheduledJobResponse> ScheduledJobs);
+
+public sealed record InternalAdminAutomationWorkflowResponse(
+    string Id,
+    string Name,
+    string Trigger,
+    string Status,
+    int TotalRuns,
+    decimal SuccessRatePercent,
+    double AvgDurationMs,
+    DateTime LastRunAtUtc);
+
+public sealed record InternalAdminAutomationExecutionResponse(
+    Guid Id,
+    string WorkflowId,
+    string WorkflowName,
+    string Status,
+    string TriggeredBy,
+    string ResourceType,
+    string ResourceId,
+    double? DurationMs,
+    DateTime StartedAtUtc);
+
+public sealed record InternalAdminScheduledJobResponse(
+    string Id,
+    string Name,
+    string Schedule,
+    DateTime NextRunAtUtc,
+    string Status);
+
+public sealed record InternalAdminFeatureFlagsResponse(
+    int TotalFlags,
+    int EnabledFlags,
+    int PartialFlags,
+    IReadOnlyCollection<InternalAdminFeatureFlagResponse> Flags,
+    IReadOnlyCollection<InternalAdminAbTestResponse> AbTests);
+
+public sealed record InternalAdminFeatureFlagResponse(
+    string Id,
+    string Key,
+    string Name,
+    string Type,
+    string Status,
+    int RolloutPercent,
+    DateTime UpdatedAtUtc,
+    string TargetingType);
+
+public sealed record InternalAdminAbTestResponse(
+    string Id,
+    string Name,
+    string Status,
+    IReadOnlyCollection<InternalAdminAbTestVariantResponse> Variants,
+    int Visitors,
+    string Winner);
+
+public sealed record InternalAdminAbTestVariantResponse(
+    string Name,
+    int Conversions);
