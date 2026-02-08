@@ -36,3 +36,7 @@ Huminex-Automation/test-results
 **/obj/
 TestResults/
 *.trx
+
+# add to .gitignore
+**/obj/
+**/bin/
