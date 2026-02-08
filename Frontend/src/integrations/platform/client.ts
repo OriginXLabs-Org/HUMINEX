@@ -119,7 +119,6 @@ async function buildSessionFromApiToken(accessToken: string, refreshToken: strin
     },
   };
   localStorage.setItem("huminex_tenant_role", profile.role);
-  localStorage.setItem("atlas_tenant_role", profile.role);
   localStorage.setItem("huminex_tenant_id", profile.tenantId);
   return session;
 }

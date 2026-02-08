@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { platformClient as platform } from "@/integrations/platform/client";
+import { getEntraConfigError } from "@/integrations/auth/entra";
 import huminexLogo from "@/assets/huminex-mark.svg";
 import { 
   Mail, 
@@ -29,12 +30,15 @@ const loginSchema = z.object({
 const TenantAuth = () => {
   const [loading, setLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [entraConfigError, setEntraConfigError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     email: "",
   });
   const navigate = useNavigate();
 
   useEffect(() => {
+    setEntraConfigError(getEntraConfigError());
+
     const { data: { subscription } } = platform.auth.onAuthStateChange(
       (event, session) => {
         if (session?.user) {
@@ -62,6 +66,12 @@ const TenantAuth = () => {
     setLoading(true);
 
     try {
+      const configError = getEntraConfigError();
+      if (configError) {
+        toast.error(configError);
+        return;
+      }
+
       const validated = loginSchema.parse({
         email: formData.email,
       });
@@ -172,6 +182,11 @@ const TenantAuth = () => {
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
+              {entraConfigError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {entraConfigError}
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-[#0F1E3A] text-sm font-medium">Work Email</Label>
                 <div className="relative group">

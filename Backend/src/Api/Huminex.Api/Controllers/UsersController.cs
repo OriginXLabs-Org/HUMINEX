@@ -46,6 +46,7 @@ public sealed class UsersController(IUserRepository userRepository, ITenantProvi
     /// <param name="cancellationToken">Request cancellation token.</param>
     /// <returns>No content when role update succeeds.</returns>
     [HttpPut("users/{id:guid}/roles")]
+    [Authorize(Roles = "Admin")]
     [Authorize(Policy = PermissionPolicies.UserRoleWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> UpdateRoles(Guid id, [FromBody] UpdateUserRolesRequest request, CancellationToken cancellationToken)

@@ -238,8 +238,8 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   const handleSignOut = async () => {
     await platform.auth.signOut();
-    localStorage.removeItem("atlas_dev_mode");
-    localStorage.removeItem("atlas_dev_mode_type");
+    localStorage.removeItem("huminex_dev_mode");
+    localStorage.removeItem("huminex_dev_mode_type");
     navigate("/admin/login");
   };
 

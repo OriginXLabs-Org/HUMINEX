@@ -5,7 +5,27 @@ const clientId = import.meta.env.VITE_AZURE_AD_CLIENT_ID as string | undefined;
 const apiScope = (import.meta.env.VITE_AZURE_AD_API_SCOPE as string | undefined) ?? "api://huminex-api/access_as_user";
 const redirectUri = (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined) ?? window.location.origin;
 
-const hasRequiredMsalConfig = Boolean(tenantId && clientId);
+function isConfigured(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toUpperCase();
+  return normalized.length > 0 && !normalized.startsWith("YOUR_") && normalized !== "REPLACE_ME";
+}
+
+export const hasRequiredMsalConfig = isConfigured(tenantId) && isConfigured(clientId);
+
+export function getEntraConfigError(): string | null {
+  const missing: string[] = [];
+  if (!isConfigured(tenantId)) missing.push("VITE_AZURE_AD_TENANT_ID");
+  if (!isConfigured(clientId)) missing.push("VITE_AZURE_AD_CLIENT_ID");
+  if (!isConfigured(apiScope)) missing.push("VITE_AZURE_AD_API_SCOPE");
+  if (!isConfigured(redirectUri)) missing.push("VITE_AZURE_AD_REDIRECT_URI");
+
+  if (missing.length === 0) {
+    return null;
+  }
+
+  return `Microsoft Entra configuration missing in frontend env: ${missing.join(", ")}`;
+}
 
 if (!hasRequiredMsalConfig) {
   console.warn("Missing Entra config. Set VITE_AZURE_AD_TENANT_ID and VITE_AZURE_AD_CLIENT_ID.");
@@ -48,8 +68,9 @@ export async function getMsalInstance(): Promise<PublicClientApplication> {
 }
 
 export async function loginWithMicrosoft(loginHint?: string): Promise<AuthenticationResult> {
-  if (!hasRequiredMsalConfig) {
-    throw new Error("Microsoft Entra configuration missing in frontend env.");
+  const configError = getEntraConfigError();
+  if (configError) {
+    throw new Error(configError);
   }
 
   const msal = await getMsalInstance();

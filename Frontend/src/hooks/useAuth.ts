@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import type { AuthUser as User, AuthSession as Session } from "@/integrations/platform/client";
 import { platformClient as platform } from "@/integrations/platform/client";
 
-export const DEV_MODE_KEY = "atlas_dev_mode";
-export const DEV_MODE_TYPE_KEY = "atlas_dev_mode_type";
+export const DEV_MODE_KEY = "huminex_dev_mode";
+export const DEV_MODE_TYPE_KEY = "huminex_dev_mode_type";
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);

@@ -55,27 +55,30 @@ builder.Services
         {
             builder.Configuration.Bind("AzureAd", jwtOptions);
             jwtOptions.TokenValidationParameters ??= new TokenValidationParameters();
+            jwtOptions.TokenValidationParameters.RoleClaimType = "roles";
+            jwtOptions.TokenValidationParameters.NameClaimType = "preferred_username";
 
             var configuredAudiences = builder.Configuration.GetSection("AzureAd:ValidAudiences").Get<string[]>();
             if (configuredAudiences is { Length: > 0 })
             {
                 jwtOptions.TokenValidationParameters.ValidAudiences = configuredAudiences;
-                return;
             }
-
-            var fallbackAudiences = new[]
+            else
             {
-                builder.Configuration["AzureAd:Audience"],
-                builder.Configuration["AzureAd:ClientId"],
-            }
-            .Where(audience => !string.IsNullOrWhiteSpace(audience))
-            .Cast<string>()
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+                var fallbackAudiences = new[]
+                {
+                    builder.Configuration["AzureAd:Audience"],
+                    builder.Configuration["AzureAd:ClientId"],
+                }
+                .Where(audience => !string.IsNullOrWhiteSpace(audience))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
-            if (fallbackAudiences.Length > 0)
-            {
-                jwtOptions.TokenValidationParameters.ValidAudiences = fallbackAudiences;
+                if (fallbackAudiences.Length > 0)
+                {
+                    jwtOptions.TokenValidationParameters.ValidAudiences = fallbackAudiences;
+                }
             }
         },
         msIdentityOptions => builder.Configuration.Bind("AzureAd", msIdentityOptions));
