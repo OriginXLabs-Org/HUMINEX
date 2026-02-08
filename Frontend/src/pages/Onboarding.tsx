@@ -17,7 +17,7 @@ import {
   ArrowLeft, 
   Check, 
   Mail, 
-  Lock, 
+  Lock,
   User, 
   Building2,
   Phone,
@@ -36,9 +36,9 @@ import {
 
 const OnboardingSteps = [
   { id: 1, title: "Welcome", icon: Sparkles },
-  { id: 2, title: "Create Account", icon: User },
+  { id: 2, title: "Organization Details", icon: User },
   { id: 3, title: "Agreements", icon: Shield },
-  { id: 4, title: "Verification", icon: Mail },
+  { id: 4, title: "Request Submitted", icon: Mail },
   { id: 5, title: "Services", icon: Code },
   { id: 6, title: "Complete", icon: Check },
 ];
@@ -74,7 +74,6 @@ export default function Onboarding() {
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
-    password: "",
     company: "",
     phone: "",
     industryCategory: "",
@@ -83,7 +82,7 @@ export default function Onboarding() {
     agreements: {} as Record<string, boolean>,
     selectedServices: [] as string[],
   });
-  const { user, signUp } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -165,7 +164,7 @@ export default function Onboarding() {
     }
   };
 
-  const validateForm = () => {
+  const validateRequestForm = () => {
     if (!formData.fullName.trim()) {
       toast({ title: "Error", description: "Please enter your full name", variant: "destructive" });
       return false;
@@ -174,30 +173,50 @@ export default function Onboarding() {
       toast({ title: "Error", description: "Please enter a valid email address", variant: "destructive" });
       return false;
     }
-    if (!formData.password || formData.password.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+    if (!formData.industryCategory.trim()) {
+      toast({ title: "Error", description: "Please select an industry category", variant: "destructive" });
       return false;
     }
     return true;
   };
 
-  const handleSignUp = async () => {
-    if (!validateForm()) return;
+  const handleSubmitOnboarding = async () => {
+    if (!validateRequestForm()) return;
+    if (!allRequiredAgreed) {
+      toast({ title: "Error", description: "Please accept all required policies", variant: "destructive" });
+      return;
+    }
     
     setIsLoading(true);
     try {
-      await signUp(formData.email, formData.password, {
-        full_name: formData.fullName,
-        company_name: formData.company,
-        phone: formData.phone,
-      });
+      const industryType =
+        formData.industryType === "Custom Category" ? formData.customIndustry : formData.industryType;
+
+      const { error } = await platform
+        .from("onboarding_sessions")
+        .insert({
+          full_name: formData.fullName,
+          email: formData.email,
+          company_name: formData.company,
+          phone: formData.phone,
+          industry_type: formData.industryCategory,
+          industry_subtype: industryType,
+          selected_services: formData.selectedServices,
+          agreements: formData.agreements,
+          status: "pending_approval",
+        });
+
+      if (error) {
+        throw error;
+      }
+
       toast({
-        title: "Account Created",
-        description: "Your account has been created successfully!",
+        title: "Request Submitted",
+        description: "Your onboarding request has been submitted for review.",
       });
       handleNext();
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to create account. Please try again.";
+      const errorMessage = error instanceof Error ? error.message : "Failed to submit onboarding request. Please try again.";
       toast({
         title: "Error",
         description: errorMessage,
@@ -294,7 +313,7 @@ export default function Onboarding() {
                 Built for the Next Generation of Innovation.
               </p>
               <p className="text-sm text-muted-foreground mb-10">
-                Before we begin, let's set up your account.
+                Before we begin, submit your onboarding request for admin approval.
               </p>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -309,7 +328,7 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 2: Account Creation */}
+          {/* Step 2: Organization Details */}
           {currentStep === 2 && (
             <div className="animate-fade-in-up">
               <div className="bg-card/80 backdrop-blur-xl rounded-3xl border border-border/60 shadow-elevated p-8 lg:p-10">
@@ -317,8 +336,8 @@ export default function Onboarding() {
                   <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                     <User className="w-7 h-7 text-primary" />
                   </div>
-                  <h2 className="text-2xl font-heading font-bold text-foreground mb-2">Create Your Account</h2>
-                  <p className="text-muted-foreground">Enter your details to get started</p>
+                  <h2 className="text-2xl font-heading font-bold text-foreground mb-2">Organization Details</h2>
+                  <p className="text-muted-foreground">Enter your details to submit onboarding for review</p>
                 </div>
 
                 <div className="space-y-5">
@@ -434,20 +453,6 @@ export default function Onboarding() {
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="password" className="text-sm font-medium">Password *</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input 
-                        id="password"
-                        type="password"
-                        placeholder="Create a strong password (min 6 characters)"
-                        className="pl-10 h-11 rounded-xl border-border/60 focus:border-primary/50"
-                        value={formData.password}
-                        onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                      />
-                    </div>
-                  </div>
                 </div>
 
                 <div className="flex justify-between mt-8">
@@ -512,8 +517,8 @@ export default function Onboarding() {
                     <ArrowLeft className="w-4 h-4" />
                     Back
                   </Button>
-                  <Button onClick={handleSignUp} disabled={!allRequiredAgreed || isLoading} className="gap-2 px-6">
-                    {isLoading ? "Creating Account..." : "Create Account"}
+                  <Button onClick={handleSubmitOnboarding} disabled={!allRequiredAgreed || isLoading} className="gap-2 px-6">
+                    {isLoading ? "Submitting..." : "Submit Request"}
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </div>
@@ -521,7 +526,7 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 4: Verification */}
+          {/* Step 4: Request Submitted */}
           {currentStep === 4 && (
             <div className="animate-fade-in-up text-center">
               <div className="bg-card/80 backdrop-blur-xl rounded-3xl border border-border/60 shadow-elevated p-8 lg:p-10">
@@ -529,9 +534,9 @@ export default function Onboarding() {
                   <Mail className="w-10 h-10 text-primary" />
                 </div>
 
-                <h2 className="text-2xl font-heading font-bold text-foreground mb-2">Account Created!</h2>
+                <h2 className="text-2xl font-heading font-bold text-foreground mb-2">Request Submitted!</h2>
                 <p className="text-muted-foreground mb-6">
-                  Your account has been set up successfully. You can now continue to select your services.
+                  Your onboarding request is pending review. Access will be enabled after approval and Entra invite/role assignment.
                 </p>
 
                 <div className="bg-muted/30 rounded-xl p-4 mb-8">
@@ -613,15 +618,15 @@ export default function Onboarding() {
               <SuccessAnimation />
 
               <h1 className="text-3xl lg:text-4xl font-heading font-bold text-foreground mb-4 tracking-tight">
-                Your HUMINEX Workspace Is Ready
+                Onboarding Request Received
               </h1>
               <p className="text-lg text-muted-foreground mb-10">
-                Welcome aboard! Let's build something amazing together.
+                Your organization request is now in the approval queue. Once approved, you can sign in via Microsoft Entra.
               </p>
 
-              <Button size="lg" onClick={() => navigate("/portal")} className="gap-2 px-8 shadow-purple">
+              <Button size="lg" onClick={() => navigate("/tenant/login")} className="gap-2 px-8 shadow-purple">
                 <Rocket className="w-5 h-5" />
-                Enter Dashboard
+                Go to Employer Login
               </Button>
             </div>
           )}

@@ -26,6 +26,7 @@ import { ForgotPasswordModal } from "@/components/auth/ForgotPasswordModal";
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid work email address"),
 });
+const INTERNAL_ADMIN_EMAIL = "originxlabs@gmail.com";
 
 const TenantAuth = () => {
   const [loading, setLoading] = useState(false);
@@ -75,6 +76,11 @@ const TenantAuth = () => {
       const validated = loginSchema.parse({
         email: formData.email,
       });
+
+      if (validated.email.trim().toLowerCase() === INTERNAL_ADMIN_EMAIL) {
+        toast.error("This account is reserved for HUMINEX internal admin. Use /admin/login.");
+        return;
+      }
 
       const { error } = await platform.auth.signInWithPassword({
         email: validated.email,

@@ -16,6 +16,10 @@ export type AuthSession = {
 
 type ApiResult<T> = { data: T; error: null; count?: number | null };
 type AuthListener = (event: string, session: AuthSession | null) => void;
+type EntraAuthContext = {
+  authMethods: string[];
+  authStrength?: string;
+};
 
 const SESSION_STORAGE_KEY = "huminex_api_session";
 
@@ -102,7 +106,22 @@ function notify(event: string, session: AuthSession | null): void {
   }
 }
 
-async function buildSessionFromApiToken(accessToken: string, refreshToken: string, expiresAtUtc: string): Promise<AuthSession> {
+function normalizeStringArrayClaim(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string").map((item) => item.toLowerCase());
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value.toLowerCase()];
+  }
+  return [];
+}
+
+async function buildSessionFromApiToken(
+  accessToken: string,
+  refreshToken: string,
+  expiresAtUtc: string,
+  entraAuthContext?: EntraAuthContext
+): Promise<AuthSession> {
   const profile = await huminexApi.me(accessToken);
   const session: AuthSession = {
     access_token: accessToken,
@@ -115,6 +134,8 @@ async function buildSessionFromApiToken(accessToken: string, refreshToken: strin
         full_name: profile.name,
         role: profile.role,
         tenant_id: profile.tenantId,
+        auth_methods: entraAuthContext?.authMethods ?? [],
+        auth_strength: entraAuthContext?.authStrength ?? "",
       },
     },
   };
@@ -165,10 +186,19 @@ const auth = {
   async signInWithPassword(payload: { email: string; password: string }) {
     try {
       const result = await loginWithMicrosoft(payload.email);
+      const claims = (result.idTokenClaims ?? {}) as Record<string, unknown>;
+      const authMethods = normalizeStringArrayClaim(claims.amr);
+      const authStrength = typeof claims.acrs === "string"
+        ? claims.acrs
+        : Array.isArray(claims.acrs) && claims.acrs.length > 0 && typeof claims.acrs[0] === "string"
+          ? claims.acrs[0]
+          : "";
+
       const session = await buildSessionFromApiToken(
         result.accessToken,
         result.idToken,
-        result.expiresOn?.toISOString() ?? new Date(Date.now() + 3600_000).toISOString()
+        result.expiresOn?.toISOString() ?? new Date(Date.now() + 3600_000).toISOString(),
+        { authMethods, authStrength }
       );
       saveStoredSession(session);
       notify("SIGNED_IN", session);
@@ -178,7 +208,11 @@ const auth = {
     }
   },
   async signUp(payload: { email: string; password: string; options?: unknown }) {
-    return this.signInWithPassword({ email: payload.email, password: payload.password });
+    void payload;
+    return {
+      data: { session: null, user: null },
+      error: new Error("Self-service sign-up is disabled. Submit onboarding and wait for Entra invite/role assignment."),
+    };
   },
   async signOut() {
     try {
@@ -206,9 +240,27 @@ const auth = {
 };
 
 const functionsApi = {
-  async invoke(name: string, _payload?: unknown) {
+  async invoke(name: string, payload?: unknown) {
     if (name === "generate-invoice-pdf") {
       return { data: { url: "https://www.gethuminex.com/sample-invoice.pdf" }, error: null };
+    }
+    if (name === "admin-auth-audit") {
+      try {
+        const body = (payload as { body?: {
+          portal: string;
+          status: "attempt" | "blocked" | "success" | "failure";
+          reason: string;
+          path?: string;
+          userAgent?: string;
+        } })?.body;
+        if (body) {
+          const data = await huminexApi.logAdminAuthAudit(body);
+          return { data, error: null };
+        }
+      } catch (error: any) {
+        return { data: null, error };
+      }
+      return { data: null, error: new Error("Missing admin-auth-audit payload.body") };
     }
     return { data: { ok: true, name }, error: null };
   },

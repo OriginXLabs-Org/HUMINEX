@@ -61,6 +61,19 @@ export type PayslipDto = {
   status: string;
 };
 
+export type AdminAuthAuditRequest = {
+  portal: string;
+  status: "attempt" | "blocked" | "success" | "failure";
+  reason: string;
+  path?: string;
+  userAgent?: string;
+};
+
+export type AdminAuthAuditResponse = {
+  accepted: boolean;
+  message: string;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api/v1";
 const SESSION_STORAGE_KEY = "huminex_api_session";
 
@@ -146,6 +159,11 @@ export async function apiRequest<TResponse>(
 
 export const huminexApi = {
   health: () => apiRequest<{ service: string; status: string; utcTime: string }>("/system/health"),
+  logAdminAuthAudit: (request: AdminAuthAuditRequest, accessToken?: string) =>
+    apiRequest<AdminAuthAuditResponse>("/system/admin-auth-audit", {
+      method: "POST",
+      body: JSON.stringify(request),
+    }, accessToken),
   me: (accessToken?: string) => apiRequest<UserProfileResponse>("/users/me", {}, accessToken),
   updateUserRoles: (id: string, roles: string[], accessToken?: string) =>
     apiRequest<void>(`/users/${id}/roles`, {

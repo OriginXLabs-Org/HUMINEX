@@ -1,27 +1,58 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { platformClient as platform } from "@/integrations/platform/client";
 import { getEntraConfigError } from "@/integrations/auth/entra";
 import { huminexApi } from "@/integrations/api/client";
 import huminexLogo from "@/assets/huminex-mark.svg";
-import { ArrowLeft, Loader2, Mail, Shield } from "lucide-react";
-import { z } from "zod";
-
-const loginSchema = z.object({
-  email: z.string().email("Please enter a valid admin email"),
-});
+import { AlertTriangle, ArrowLeft, Loader2, Shield } from "lucide-react";
 
 const ADMIN_ROLES = new Set(["admin", "super_admin", "director"]);
+const INTERNAL_ADMIN_EMAIL = "originxlabs@gmail.com";
+const STRONG_AUTH_METHODS = new Set(["mfa", "fido", "rsa", "otp", "wia", "hwk", "x509"]);
+const ADMIN_AUDIT_STORAGE_KEY = "huminex_admin_auth_audit";
+
+function hasStrongEntraVerification(userMetadata: Record<string, unknown> | undefined): boolean {
+  const raw = userMetadata?.auth_methods;
+  if (!Array.isArray(raw)) return false;
+  const authMethods = raw.filter((item): item is string => typeof item === "string").map((item) => item.toLowerCase());
+  return authMethods.some((method) => STRONG_AUTH_METHODS.has(method));
+}
+
+type AdminAuditStatus = "attempt" | "blocked" | "success" | "failure";
 
 const AdminAuth = () => {
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
   const [entraConfigError, setEntraConfigError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const captureAdminAudit = async (status: AdminAuditStatus, reason: string): Promise<void> => {
+    const auditRecord = {
+      timestamp: new Date().toISOString(),
+      portal: "internal_admin",
+      status,
+      reason,
+      path: window.location.pathname,
+      userAgent: navigator.userAgent,
+    };
+
+    try {
+      const raw = localStorage.getItem(ADMIN_AUDIT_STORAGE_KEY);
+      const entries = raw ? (JSON.parse(raw) as unknown[]) : [];
+      const nextEntries = Array.isArray(entries) ? entries.slice(-99) : [];
+      nextEntries.push(auditRecord);
+      localStorage.setItem(ADMIN_AUDIT_STORAGE_KEY, JSON.stringify(nextEntries));
+    } catch {
+      // Best-effort local audit buffer.
+    }
+
+    try {
+      await platform.functions.invoke("admin-auth-audit", { body: auditRecord });
+    } catch {
+      // Best-effort remote audit event.
+    }
+  };
 
   useEffect(() => {
     setEntraConfigError(getEntraConfigError());
@@ -31,10 +62,22 @@ const AdminAuth = () => {
       if (!session?.user) return;
 
       try {
+        const sessionEmail = (session.user.email || "").toLowerCase();
+        if (sessionEmail !== INTERNAL_ADMIN_EMAIL || !hasStrongEntraVerification(session.user.user_metadata)) {
+          await captureAdminAudit("blocked", "session_failed_internal_checks");
+          await platform.auth.signOut();
+          return;
+        }
+
         const me = await huminexApi.me();
         const role = (me.role || "").toLowerCase();
-        if (ADMIN_ROLES.has(role)) {
+        const profileEmail = (me.email || "").toLowerCase();
+        if (profileEmail === INTERNAL_ADMIN_EMAIL && ADMIN_ROLES.has(role)) {
+          await captureAdminAudit("success", "session_restored");
           navigate("/admin", { replace: true });
+        } else {
+          await captureAdminAudit("blocked", "session_role_or_profile_mismatch");
+          await platform.auth.signOut();
         }
       } catch {
         // Ignore and stay on login page.
@@ -51,38 +94,61 @@ const AdminAuth = () => {
     try {
       const configError = getEntraConfigError();
       if (configError) {
+        await captureAdminAudit("blocked", "entra_config_missing");
         toast.error(configError);
         return;
       }
 
-      const validated = loginSchema.parse({ email });
-
-      const { error } = await platform.auth.signInWithPassword({
-        email: validated.email,
+      await captureAdminAudit("attempt", "interactive_login_started");
+      const { data, error } = await platform.auth.signInWithPassword({
+        email: INTERNAL_ADMIN_EMAIL,
         password: "microsoft-entra",
       });
 
       if (error) {
+        await captureAdminAudit("failure", "entra_auth_failed");
         toast.error(error.message || "Unable to authenticate with Microsoft Entra");
+        return;
+      }
+
+      const signedInEmail = (data?.user?.email ?? "").toLowerCase();
+      if (signedInEmail !== INTERNAL_ADMIN_EMAIL) {
+        await captureAdminAudit("blocked", "signed_in_email_not_internal");
+        await platform.auth.signOut();
+        toast.error("Access denied. This portal is restricted to HUMINEX internal admin identity.");
+        return;
+      }
+
+      if (!hasStrongEntraVerification(data?.user?.user_metadata)) {
+        await captureAdminAudit("blocked", "mfa_or_passkey_missing");
+        await platform.auth.signOut();
+        toast.error("Access denied. Azure Authenticator/Passkey (MFA) verification is required for Admin access.");
         return;
       }
 
       const me = await huminexApi.me();
       const role = (me.role || "").toLowerCase();
-      if (!ADMIN_ROLES.has(role)) {
+      const profileEmail = (me.email || "").toLowerCase();
+      if (profileEmail !== INTERNAL_ADMIN_EMAIL) {
+        await captureAdminAudit("blocked", "profile_email_mismatch");
         await platform.auth.signOut();
-        toast.error("Access denied. Admin privileges are required.");
+        toast.error("Access denied. Internal admin profile verification failed.");
         return;
       }
 
+      if (!ADMIN_ROLES.has(role)) {
+        await captureAdminAudit("blocked", "missing_admin_role");
+        await platform.auth.signOut();
+        toast.error("Access denied. Azure admin role privileges are required.");
+        return;
+      }
+
+      await captureAdminAudit("success", "interactive_login_completed");
       toast.success("Welcome to HUMINEX Admin Portal");
       navigate("/admin", { replace: true });
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        toast.error(err.errors[0].message);
-      } else {
-        toast.error("Authentication failed. Please try again.");
-      }
+      await captureAdminAudit("failure", "unexpected_exception");
+      toast.error("Authentication failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -115,29 +181,28 @@ const AdminAuth = () => {
             <p className="text-[#6B8A8E] text-sm">Microsoft Entra secured access</p>
           </div>
 
+          <div className="mb-6 rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-red-400" />
+              <div>
+                <p className="text-sm font-semibold text-red-300">Danger: Internal Use Only</p>
+                <p className="text-xs text-red-200/90">
+                  OriginX Labs / HUMINEX internal admin portal. All access attempts are captured and logged.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-6 rounded-xl border border-[#1E3A4A] bg-[#0A0F1C] px-4 py-3 text-xs text-[#A0B4B8]">
+            Employer Admin access is separate and available via <span className="font-semibold text-white">/tenant/login</span>.
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-5">
             {entraConfigError && (
               <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
                 {entraConfigError}
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-[#A0B4B8]">Admin Email</Label>
-              <div className="relative group">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6B8A8E] group-focus-within:text-[#4FF2F2] transition-colors" />
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="admin@gethuminex.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 h-12 bg-[#0A0F1C] border-[#1E3A4A] text-white placeholder:text-[#4A5A6A] focus:border-[#00A6A6] focus:ring-[#00A6A6]/20 rounded-xl"
-                  required
-                />
-              </div>
-            </div>
 
             <Button
               type="submit"
