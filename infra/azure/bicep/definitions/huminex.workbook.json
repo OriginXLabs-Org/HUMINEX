@@ -1,0 +1,289 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# HUMINEX\nUnified Azure Operations, Security, FinOps and Platform Visibility"
+      },
+      "name": "title"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 1) Executive Overview"
+      },
+      "name": "exec-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let tr=24h;\nlet alertSummary=AlertsManagementResources\n| where TimeGenerated > ago(tr)\n| summarize open_alerts=countif(tostring(properties.essentials.monitorCondition)==\"Fired\");\nlet platformHeartbeat=Heartbeat\n| where TimeGenerated > ago(15m)\n| summarize healthy_nodes=dcount(Computer);\nalertSummary\n| join kind=fullouter platformHeartbeat on 1==1\n| project healthy_nodes, open_alerts, platform_health=case(open_alerts==0, \"Green\", open_alerts<5, \"Yellow\", \"Red\")",
+        "size": 0,
+        "title": "Platform Health Summary",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "exec-health"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CostUsage_CL\n| where todatetime(UsageDate_t) > ago(90d)\n| summarize cost=sum(CostInBillingCurrency_d) by bin(todatetime(UsageDate_t), 1d)\n| order by UsageDate_t asc",
+        "size": 0,
+        "title": "Cost Trend (90 days)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "timechart"
+      },
+      "name": "exec-cost"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 2) AKS & Kubernetes"
+      },
+      "name": "aks-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "KubeNodeInventory\n| where TimeGenerated > ago(15m)\n| summarize nodes=dcount(Computer), notReady=countif(Status != \"Ready\") by ClusterName",
+        "size": 0,
+        "title": "Cluster & Node Health",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "aks-nodes"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "KubePodInventory\n| where TimeGenerated > ago(30m)\n| summarize pods=dcount(PodUid), failed=countif(PodStatus in (\"Failed\",\"CrashLoopBackOff\")), restarts=sum(ContainerRestartCount) by Namespace\n| order by failed desc",
+        "size": 0,
+        "title": "Pods / Failures / Restarts by Namespace",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "aks-pods"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 3) Application Insights (HUMINEX APIs)"
+      },
+      "name": "app-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AppRequests\n| where TimeGenerated > ago(24h)\n| summarize requests=count(), failures=countif(Success == false), p95=percentile(DurationMs,95) by bin(TimeGenerated, 15m)\n| extend failureRate = iff(requests==0, 0.0, failures*100.0/requests)",
+        "size": 0,
+        "title": "Requests, Failure Rate, P95",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "timechart"
+      },
+      "name": "app-main"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AppRequests\n| where TimeGenerated > ago(24h)\n| summarize p95=percentile(DurationMs,95), failures=countif(Success == false), calls=count() by Name\n| top 10 by p95 desc",
+        "size": 0,
+        "title": "Top Slow Endpoints",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "app-slow"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 4) Cost Management (FinOps)"
+      },
+      "name": "finops-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CostUsage_CL\n| where todatetime(UsageDate_t) > ago(30d)\n| summarize cost=sum(CostInBillingCurrency_d) by ResourceGroup_s, ServiceName_s, Environment_s, Team_s, Owner_s\n| order by cost desc",
+        "size": 0,
+        "title": "Cost by RG / Service / Env / Team / Owner",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "finops-breakdown"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CostUsage_CL\n| where todatetime(UsageDate_t) > ago(14d)\n| summarize dailyBurn=sum(CostInBillingCurrency_d) by bin(todatetime(UsageDate_t), 1d)",
+        "size": 0,
+        "title": "Daily Burn Rate",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "timechart"
+      },
+      "name": "finops-burn"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 5) Security & Identity"
+      },
+      "name": "sec-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| where TimeGenerated > ago(7d)\n| summarize alerts=count() by AlertSeverity\n| order by alerts desc",
+        "size": 0,
+        "title": "Defender Alerts by Severity",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "barchart"
+      },
+      "name": "sec-defender"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SigninLogs\n| where TimeGenerated > ago(24h)\n| summarize failed=countif(ResultType != 0), success=countif(ResultType == 0) by AppDisplayName\n| order by failed desc",
+        "size": 0,
+        "title": "Entra Sign-in Success/Failure",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "sec-signin"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 6) Logs & Audit"
+      },
+      "name": "logs-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerLogV2\n| where TimeGenerated > ago(2h)\n| where LogMessage has_any (\"error\",\"exception\",\"timeout\")\n| project TimeGenerated, KubernetesNamespace, PodName, ContainerName, LogMessage\n| order by TimeGenerated desc",
+        "size": 0,
+        "title": "AKS Error Logs",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "logs-aks"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where TimeGenerated > ago(7d)\n| summarize changes=count() by Caller, OperationNameValue, ActivityStatusValue\n| order by changes desc",
+        "size": 0,
+        "title": "Activity/Audit Trail",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "logs-audit"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 7) Ownership & Accountability"
+      },
+      "name": "owner-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| summarize resources=count() by tostring(tags.owner), tostring(tags.team), resourceGroup\n| order by resources desc",
+        "size": 0,
+        "title": "Resource Ownership Map",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "owner-map"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where TimeGenerated > ago(30d)\n| where OperationNameValue has_any (\"write\",\"deploy\")\n| summarize last_deployment=max(TimeGenerated) by ResourceGroup, Caller\n| order by last_deployment desc",
+        "size": 0,
+        "title": "Last Deployment by Resource Group",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceIds": [
+          "__LAW_RESOURCE_ID__"
+        ],
+        "visualization": "table"
+      },
+      "name": "owner-deploy"
+    }
+  ],
+  "isLocked": false,
+  "fallbackResourceIds": [
+    "__LAW_RESOURCE_ID__"
+  ]
+}
