@@ -9,9 +9,25 @@ const hostedFallbackApiScope = isHostedOnHuminexDomain
   ? "api://40efefe7-8bc1-4452-9261-8f1973a0b5fa/access_as_user"
   : "api://huminex-api/access_as_user";
 
-const tenantId = (import.meta.env.VITE_AZURE_AD_TENANT_ID as string | undefined) ?? hostedFallbackTenantId;
-const clientId = (import.meta.env.VITE_AZURE_AD_CLIENT_ID as string | undefined) ?? hostedFallbackClientId;
-const apiScope = (import.meta.env.VITE_AZURE_AD_API_SCOPE as string | undefined) ?? hostedFallbackApiScope;
+const configuredTenantId = import.meta.env.VITE_AZURE_AD_TENANT_ID as string | undefined;
+const configuredClientId = import.meta.env.VITE_AZURE_AD_CLIENT_ID as string | undefined;
+const configuredApiScope = import.meta.env.VITE_AZURE_AD_API_SCOPE as string | undefined;
+
+const tenantId = isHostedOnHuminexDomain ? hostedFallbackTenantId : (configuredTenantId ?? hostedFallbackTenantId);
+const clientId = isHostedOnHuminexDomain ? hostedFallbackClientId : (configuredClientId ?? hostedFallbackClientId);
+const apiScope = isHostedOnHuminexDomain ? hostedFallbackApiScope : (configuredApiScope ?? hostedFallbackApiScope);
+
+if (isHostedOnHuminexDomain) {
+  if (configuredTenantId && hostedFallbackTenantId && configuredTenantId !== hostedFallbackTenantId) {
+    console.warn("Ignoring VITE_AZURE_AD_TENANT_ID on hosted domain; using canonical HUMINEX tenant.");
+  }
+  if (configuredClientId && hostedFallbackClientId && configuredClientId !== hostedFallbackClientId) {
+    console.warn("Ignoring VITE_AZURE_AD_CLIENT_ID on hosted domain; using canonical HUMINEX SPA app.");
+  }
+  if (configuredApiScope && configuredApiScope !== hostedFallbackApiScope) {
+    console.warn("Ignoring VITE_AZURE_AD_API_SCOPE on hosted domain; using canonical HUMINEX API scope.");
+  }
+}
 const defaultRedirectUri = (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined) ?? window.location.origin;
 const adminRedirectUri = (import.meta.env.VITE_AZURE_AD_ADMIN_REDIRECT_URI as string | undefined) ?? defaultRedirectUri;
 const tenantRedirectUri = (import.meta.env.VITE_AZURE_AD_TENANT_REDIRECT_URI as string | undefined) ?? defaultRedirectUri;
