@@ -10,10 +10,8 @@ interface CheckResult {
 const checks: Array<{ name: string; path: string; method?: string; headers?: Record<string, string> }> = [
   { name: "health", path: "/api/v1/system/health" },
   {
-    name: "auth-login",
+    name: "auth-login-removed",
     path: "/api/v1/auth/login",
-    method: "POST",
-    headers: { "content-type": "application/json" },
   },
   {
     name: "payroll-runs-rbac",
@@ -34,24 +32,17 @@ async function run(): Promise<void> {
   for (const check of checks) {
     const url = `${baseUrl}${check.path}`;
     const method = check.method || "GET";
-    let body: string | undefined;
-
-    if (check.name === "auth-login") {
-      body = JSON.stringify({ email: "admin@gethuminex.com", password: "demo" });
-    }
-
     try {
       const response = await fetch(url, {
         method,
         headers: check.headers,
-        body,
       });
       const text = await response.text();
       const bodySnippet = text.slice(0, 220);
 
       const ok =
-        check.name === "auth-login"
-          ? response.status === 200
+        check.name === "auth-login-removed"
+          ? response.status === 404
           : check.name === "payroll-runs-rbac"
             ? response.status === 200 || response.status === 401 || response.status === 403
             : response.ok;

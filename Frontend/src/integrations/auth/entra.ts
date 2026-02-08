@@ -59,6 +59,15 @@ export const loginRequest: PopupRequest = {
 
 let instance: PublicClientApplication | null = null;
 let initialized = false;
+let loginInFlight: Promise<AuthenticationResult> | null = null;
+
+function isInteractionInProgressError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const maybeError = error as { errorCode?: string; code?: string; message?: string };
+  const code = (maybeError.errorCode ?? maybeError.code ?? "").toLowerCase();
+  const message = (maybeError.message ?? "").toLowerCase();
+  return code === "interaction_in_progress" || message.includes("interaction_in_progress");
+}
 
 function getInstance(): PublicClientApplication {
   if (!instance) {
@@ -77,6 +86,11 @@ export async function getMsalInstance(): Promise<PublicClientApplication> {
 }
 
 export async function loginWithMicrosoft(loginHint?: string): Promise<AuthenticationResult> {
+  if (loginInFlight) {
+    return loginInFlight;
+  }
+
+  loginInFlight = (async () => {
   const configError = getEntraConfigError();
   if (configError) {
     throw new Error(configError);
@@ -84,25 +98,48 @@ export async function loginWithMicrosoft(loginHint?: string): Promise<Authentica
 
   const msal = await getMsalInstance();
   const request = loginHint ? { ...loginRequest, loginHint } : loginRequest;
-  const authResult = await msal.loginPopup(request);
+    let authResult: AuthenticationResult;
 
-  if (authResult.account) {
-    msal.setActiveAccount(authResult.account);
+    try {
+      authResult = await msal.loginPopup(request);
+    } catch (error) {
+      if (isInteractionInProgressError(error)) {
+        const existingAccount = msal.getActiveAccount() ?? msal.getAllAccounts()[0] ?? null;
+        if (existingAccount) {
+          return msal.acquireTokenSilent({
+            scopes: loginRequest.scopes,
+            account: existingAccount,
+          });
+        }
+        throw new Error("Microsoft sign-in is already in progress. Close the existing sign-in popup and retry.");
+      }
+      throw error;
+    }
+
+    if (authResult.account) {
+      msal.setActiveAccount(authResult.account);
+    }
+
+    if (authResult.accessToken) {
+      return authResult;
+    }
+
+    const account = authResult.account ?? msal.getActiveAccount();
+    if (!account) {
+      throw new Error("Microsoft login succeeded but no account context found.");
+    }
+
+    return msal.acquireTokenSilent({
+      scopes: loginRequest.scopes,
+      account,
+    });
+  })();
+
+  try {
+    return await loginInFlight;
+  } finally {
+    loginInFlight = null;
   }
-
-  if (authResult.accessToken) {
-    return authResult;
-  }
-
-  const account = authResult.account ?? msal.getActiveAccount();
-  if (!account) {
-    throw new Error("Microsoft login succeeded but no account context found.");
-  }
-
-  return msal.acquireTokenSilent({
-    scopes: loginRequest.scopes,
-    account,
-  });
 }
 
 export async function logoutMicrosoft(): Promise<void> {
