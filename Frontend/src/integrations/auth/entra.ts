@@ -15,6 +15,29 @@ const apiScope = (import.meta.env.VITE_AZURE_AD_API_SCOPE as string | undefined)
 const defaultRedirectUri = (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined) ?? window.location.origin;
 const adminRedirectUri = (import.meta.env.VITE_AZURE_AD_ADMIN_REDIRECT_URI as string | undefined) ?? defaultRedirectUri;
 const tenantRedirectUri = (import.meta.env.VITE_AZURE_AD_TENANT_REDIRECT_URI as string | undefined) ?? defaultRedirectUri;
+const configuredPopupRedirectUri = import.meta.env.VITE_AZURE_AD_POPUP_REDIRECT_URI as string | undefined;
+
+function resolveSafePopupRedirectUri(): string {
+  const fallback = window.location.origin;
+  const candidate = (configuredPopupRedirectUri ?? fallback).trim();
+
+  try {
+    const parsed = new URL(candidate, window.location.origin);
+    const normalizedPath = parsed.pathname.toLowerCase();
+
+    if (normalizedPath === "/admin/login" || normalizedPath === "/tenant/login") {
+      console.warn("Ignoring unsafe popup redirect URI pointed at login page; using site origin for popup callback.");
+      return fallback;
+    }
+
+    return parsed.toString();
+  } catch {
+    console.warn("Invalid VITE_AZURE_AD_POPUP_REDIRECT_URI. Falling back to site origin for popup callback.");
+    return fallback;
+  }
+}
+
+const popupRedirectUri = resolveSafePopupRedirectUri();
 
 export type EntraPortal = "admin" | "tenant" | "default";
 export type EntraLoginMode = "popup" | "redirect";
@@ -152,6 +175,21 @@ function resolveRedirectUri(portal: EntraPortal): string {
   return defaultRedirectUri;
 }
 
+function isInPopupWindow(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.opener != null && window.opener !== window;
+  } catch {
+    return false;
+  }
+}
+
+function hasAuthCallbackHash(): boolean {
+  if (typeof window === "undefined") return false;
+  const hash = window.location.hash.toLowerCase();
+  return hash.includes("code=") || hash.includes("error=") || hash.includes("state=");
+}
+
 export async function getMsalInstance(): Promise<PublicClientApplication> {
   const msal = getInstance();
   if (!initialized) {
@@ -163,6 +201,11 @@ export async function getMsalInstance(): Promise<PublicClientApplication> {
       const redirectResult = await msal.handleRedirectPromise();
       if (redirectResult?.account) {
         msal.setActiveAccount(redirectResult.account);
+      }
+
+      // Clean callback hash after MSAL handles it to avoid stale-code reload loops.
+      if (hasAuthCallbackHash()) {
+        window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
       } else if (hasAnyInteractionInProgress()) {
         // Recover from stale interaction flags left in storage after interrupted redirects.
         clearAnyInteractionInProgress();
@@ -220,9 +263,14 @@ export async function loginWithMicrosoft(
   const portal = options?.portal ?? "default";
   const request: PopupRequest = {
     ...loginRequest,
-    redirectUri: options?.redirectUri ?? resolveRedirectUri(portal),
+    // Popup mode should always return to a lightweight stable page, not /admin/login or /tenant/login.
+    redirectUri: popupRedirectUri,
     ...(loginHint ? { loginHint } : {}),
   };
+
+    if (isInPopupWindow()) {
+      throw new Error("Microsoft sign-in is already in progress in a popup window. Close it and retry from the main tab.");
+    }
 
     // Avoid false positives from stale MSAL interaction state on refresh/retry.
     const settled = await waitForInteractionToSettle(1500);
@@ -254,11 +302,19 @@ export async function loginWithMicrosoft(
           authResult = await msal.loginPopup(request);
         } catch (retryError) {
           if (isInteractionInProgressError(retryError)) {
-            throw new Error("Microsoft sign-in is still in progress. Please wait a moment and try again.");
+            throw new Error("Microsoft sign-in is still in progress. Close existing sign-in popups, then retry.");
+          }
+          const retryMessage = String((retryError as { message?: string })?.message ?? "");
+          if (retryMessage.toLowerCase().includes("block_nested_popups")) {
+            throw new Error("Blocked nested popup detected. Retry login from the main browser tab.");
           }
           throw retryError;
         }
       } else {
+        const message = String((error as { message?: string })?.message ?? "");
+        if (message.toLowerCase().includes("block_nested_popups")) {
+          throw new Error("Blocked nested popup detected. Retry login from the main browser tab.");
+        }
         throw error;
       }
     }
