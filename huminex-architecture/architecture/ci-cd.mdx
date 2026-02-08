@@ -13,7 +13,7 @@ flowchart LR
   GHA --> IMG[Backend Image Push -> ACR]
 
   IMG --> GITOPS[Update kustomization newTag]
-  GITOPS --> ARGO[Argo CD<br/>huminex-platform-dev]
+  GITOPS --> ARGO[Argo CD (huminex-platform-dev)]
   ARGO --> AKS[AKS Rollout]
   AKS --> VERIFY[Health/Smoke Verification]
 

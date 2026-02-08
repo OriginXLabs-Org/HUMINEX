@@ -46,9 +46,9 @@
           <h2>HUMINEX HLD Diagram</h2>
           <div class="mermaid">
 flowchart LR
-  U[Users<br/>Employer, Employee, Internal Admin] --> W[Frontend Web<br/>React + Vite + MSAL]
-  W --> I[NGINX Ingress<br/>api.gethuminex.com]
-  I --> A[HUMINEX API<br/>.NET 8]
+  U[Users (Employer, Employee, Internal Admin)] --> W[Frontend Web (React + Vite + MSAL)]
+  W --> I[NGINX Ingress (api.gethuminex.com)]
+  I --> A[HUMINEX API (.NET 8)]
   A --> P[(Azure PostgreSQL)]
   A --> R[(Redis)]
   A --> S[(Service Bus)]
@@ -58,9 +58,9 @@ flowchart LR
   A --> OT[OpenTelemetry + Serilog]
   OT --> LAW[Log Analytics]
   OT --> APPI[Application Insights]
-  LAW --> AMG[Azure Managed Grafana<br/>Unified UI]
+  LAW --> AMG[Azure Managed Grafana (Unified UI)]
   APPI --> AMG
-  PROM[Managed Prometheus<br/>(Azure Monitor)] --> AMG
+  PROM[Managed Prometheus (Azure Monitor)] --> AMG
   LAW --> MON[Azure Monitor Alerts]
   MON --> LA[Logic App -> Slack]
           </div>
@@ -113,19 +113,19 @@ flowchart TD
           <h3>OpenHuman HLD</h3>
           <div class="mermaid">
 flowchart LR
-  C[Candidate] --> WEB[Interview Web<br/>Browser + WebRTC]
-  INT[Interviewer/Recruiter] --> STUDIO[Studio UI<br/>Rubric + question bank]
-  WEB --> GW[OpenHuman Gateway API<br/>Auth + session]
+  C[Candidate] --> WEB[Interview Web (Browser + WebRTC)]
+  INT[Interviewer/Recruiter] --> STUDIO[Studio UI (Rubric + question bank)]
+  WEB --> GW[OpenHuman Gateway API (Auth + session)]
   STUDIO --> GW
-  GW --> ORCH[Interview Orchestrator<br/>State machine]
+  GW --> ORCH[Interview Orchestrator (State machine)]
   ORCH --> BUS[Service Bus]
   ORCH --> DB[(PostgreSQL)]
   ORCH --> CACHE[(Redis)]
-  ORCH --> BLOB[(Blob Storage<br/>audio/transcripts)]
-  ORCH --> STT[Speech-to-Text<br/>(Azure Speech)]
-  ORCH --> LLM[LLM Runtime<br/>(Azure OpenAI)]
-  ORCH --> RAG[RAG Knowledge<br/>(Azure AI Search)]
-  ORCH --> HUM[HUMINEX API<br/>ATS + onboarding]
+  ORCH --> BLOB[(Blob Storage (audio/transcripts))]
+  ORCH --> STT[Speech-to-Text (Azure Speech)]
+  ORCH --> LLM[LLM Runtime (Azure OpenAI)]
+  ORCH --> RAG[RAG Knowledge (Azure AI Search)]
+  ORCH --> HUM[HUMINEX API (ATS + onboarding)]
   ORCH --> OTEL[OpenTelemetry]
   OTEL --> LAW[Log Analytics]
   OTEL --> APPI[Application Insights]

@@ -6,23 +6,23 @@ title: OpenHuman HLD
 
 ```mermaid
 flowchart LR
-  C[Candidate] --> WEB[Interview Web<br/>Browser + WebRTC]
-  INT[Interviewer/Recruiter] --> STUDIO[Studio UI<br/>Question bank + rubric]
+  C[Candidate] --> WEB[Interview Web (Browser + WebRTC)]
+  INT[Interviewer/Recruiter] --> STUDIO[Studio UI (Question bank + rubric)]
 
-  WEB --> GW[OpenHuman Gateway API<br/>Auth + session]
+  WEB --> GW[OpenHuman Gateway API (Auth + session)]
   STUDIO --> GW
 
-  GW --> ORCH[Interview Orchestrator<br/>State machine]
-  ORCH --> BUS[Service Bus<br/>events/commands]
+  GW --> ORCH[Interview Orchestrator (State machine)]
+  ORCH --> BUS[Service Bus (events/commands)]
   ORCH --> DB[(PostgreSQL)]
   ORCH --> CACHE[(Redis)]
-  ORCH --> BLOB[(Blob Storage<br/>audio/transcripts)]
+  ORCH --> BLOB[(Blob Storage (audio/transcripts))]
 
-  ORCH --> STT[Speech-to-Text<br/>(Azure Speech)]
-  ORCH --> LLM[LLM Runtime<br/>(Azure OpenAI)]
-  ORCH --> RAG[RAG / Knowledge<br/>(Azure AI Search)]
+  ORCH --> STT[Speech-to-Text (Azure Speech)]
+  ORCH --> LLM[LLM Runtime (Azure OpenAI)]
+  ORCH --> RAG[RAG / Knowledge (Azure AI Search)]
 
-  ORCH --> HUM[HUMINEX API<br/>ATS + onboarding]
+  ORCH --> HUM[HUMINEX API (ATS + onboarding)]
 
   ORCH --> OTEL[OpenTelemetry]
   OTEL --> LAW[Log Analytics]
@@ -41,4 +41,3 @@ flowchart LR
   - Keep LLM calls as tools invoked by the orchestrator, never as the source-of-truth state.
 - **Safety**:
   - PII redaction before long-term storage, prompt/response logging with policy controls, strict RBAC.
-
