@@ -230,6 +230,7 @@ const auth = {
       const result = await loginWithMicrosoft(payload.email, {
         portal: payload.portal ?? "default",
         redirectUri: payload.redirectUri,
+        mode: payload.portal === "tenant" ? "redirect" : "popup",
       });
       const claims = (result.idTokenClaims ?? {}) as Record<string, unknown>;
       const authMethods = normalizeStringArrayClaim(claims.amr);
@@ -249,6 +250,9 @@ const auth = {
       notify("SIGNED_IN", session);
       return { data: { session, user: session.user }, error: null };
     } catch (error: any) {
+      if (typeof error?.message === "string" && error.message.includes("entra_redirect_in_progress")) {
+        return { data: { session: null, user: null, redirecting: true }, error: null };
+      }
       return { data: { session: null, user: null }, error };
     }
   },

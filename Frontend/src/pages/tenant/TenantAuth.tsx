@@ -95,13 +95,18 @@ const TenantAuth = () => {
       });
 
       if (error) {
+        const message = String(error.message || "");
+        if (message.includes("AADSTS50020") || message.includes("organizations")) {
+          toast.error("Use your organization Entra account. Personal Microsoft accounts are not allowed.");
+          return;
+        }
         if (error.message.includes("Invalid login credentials")) {
           toast.error("Invalid email or password. Please try again.");
         } else {
           toast.error(error.message);
         }
       } else {
-        toast.success("Welcome to HUMINEX Employer Portal!");
+        toast.success("Redirecting to Microsoft sign-in...");
       }
     } catch (error) {
       if (error instanceof z.ZodError) {

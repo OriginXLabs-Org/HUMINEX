@@ -1,4 +1,4 @@
-import { BrowserCacheLocation, PublicClientApplication, type AuthenticationResult, type PopupRequest } from "@azure/msal-browser";
+import { BrowserCacheLocation, PublicClientApplication, type AuthenticationResult, type PopupRequest, type RedirectRequest } from "@azure/msal-browser";
 
 const isHostedOnHuminexDomain =
   typeof window !== "undefined" && /(^|\.)gethuminex\.com$/i.test(window.location.hostname);
@@ -17,6 +17,7 @@ const adminRedirectUri = (import.meta.env.VITE_AZURE_AD_ADMIN_REDIRECT_URI as st
 const tenantRedirectUri = (import.meta.env.VITE_AZURE_AD_TENANT_REDIRECT_URI as string | undefined) ?? defaultRedirectUri;
 
 export type EntraPortal = "admin" | "tenant" | "default";
+export type EntraLoginMode = "popup" | "redirect";
 
 function isConfigured(value: string | undefined): boolean {
   if (!value) return false;
@@ -59,10 +60,13 @@ export const msalConfig = {
 
 export const loginRequest: PopupRequest = {
   scopes: ["openid", "profile", "email", apiScope],
+  prompt: "select_account",
+  domainHint: "organizations",
 };
 
 let instance: PublicClientApplication | null = null;
 let initialized = false;
+let redirectHandled = false;
 let loginInFlight: Promise<AuthenticationResult> | null = null;
 
 function isInteractionInProgressError(error: unknown): boolean {
@@ -154,13 +158,51 @@ export async function getMsalInstance(): Promise<PublicClientApplication> {
     await msal.initialize();
     initialized = true;
   }
+  if (!redirectHandled) {
+    try {
+      const redirectResult = await msal.handleRedirectPromise();
+      if (redirectResult?.account) {
+        msal.setActiveAccount(redirectResult.account);
+      }
+    } catch {
+      // Best-effort recovery from stale state.
+      clearAnyInteractionInProgress();
+    } finally {
+      redirectHandled = true;
+    }
+  }
   return msal;
+}
+
+export async function startMicrosoftRedirectLogin(
+  loginHint?: string,
+  options?: { portal?: EntraPortal; redirectUri?: string }
+): Promise<void> {
+  const configError = getEntraConfigError();
+  if (configError) {
+    throw new Error(configError);
+  }
+
+  const msal = await getMsalInstance();
+  const portal = options?.portal ?? "default";
+  const request: RedirectRequest = {
+    ...loginRequest,
+    redirectUri: options?.redirectUri ?? resolveRedirectUri(portal),
+    ...(loginHint ? { loginHint } : {}),
+  };
+
+  await msal.loginRedirect(request);
 }
 
 export async function loginWithMicrosoft(
   loginHint?: string,
-  options?: { portal?: EntraPortal; redirectUri?: string }
+  options?: { portal?: EntraPortal; redirectUri?: string; mode?: EntraLoginMode }
 ): Promise<AuthenticationResult> {
+  if (options?.mode === "redirect") {
+    await startMicrosoftRedirectLogin(loginHint, options);
+    throw new Error("entra_redirect_in_progress");
+  }
+
   if (loginInFlight) {
     return loginInFlight;
   }
