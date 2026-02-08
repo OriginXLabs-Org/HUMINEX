@@ -152,11 +152,25 @@ public static class ServiceCollectionExtensions
             .WithTracing(tracing => tracing
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
-                .AddOtlpExporter())
+                .AddOtlpExporter(exporter =>
+                {
+                    var endpoint = configuration["OpenTelemetry:OtlpEndpoint"];
+                    if (!string.IsNullOrWhiteSpace(endpoint))
+                    {
+                        exporter.Endpoint = new Uri(endpoint);
+                    }
+                }))
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
-                .AddOtlpExporter());
+                .AddOtlpExporter(exporter =>
+                {
+                    var endpoint = configuration["OpenTelemetry:OtlpEndpoint"];
+                    if (!string.IsNullOrWhiteSpace(endpoint))
+                    {
+                        exporter.Endpoint = new Uri(endpoint);
+                    }
+                }));
 
         services.AddHealthChecks()
             .AddNpgSql(postgresOptions.ConnectionString, name: "postgres", tags: ["ready"])
