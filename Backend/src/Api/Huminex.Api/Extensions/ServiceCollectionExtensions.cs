@@ -30,6 +30,7 @@ public static class ServiceCollectionExtensions
         services.Configure<AzureStorageOptions>(configuration.GetSection(AzureStorageOptions.SectionName));
         services.Configure<AcsEmailOptions>(configuration.GetSection(AcsEmailOptions.SectionName));
         services.Configure<AzureAppConfigurationOptions>(configuration.GetSection(AzureAppConfigurationOptions.SectionName));
+        services.Configure<InternalAdminOptions>(configuration.GetSection(InternalAdminOptions.SectionName));
         services.Configure<DevSecurityOptions>(configuration.GetSection(DevSecurityOptions.SectionName));
         var redisOptions = configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>() ?? new RedisOptions();
 
