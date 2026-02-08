@@ -1,8 +1,17 @@
 import { BrowserCacheLocation, PublicClientApplication, type AuthenticationResult, type PopupRequest } from "@azure/msal-browser";
 
-const tenantId = import.meta.env.VITE_AZURE_AD_TENANT_ID as string | undefined;
-const clientId = import.meta.env.VITE_AZURE_AD_CLIENT_ID as string | undefined;
-const apiScope = (import.meta.env.VITE_AZURE_AD_API_SCOPE as string | undefined) ?? "api://huminex-api/access_as_user";
+const isHostedOnHuminexDomain =
+  typeof window !== "undefined" && /(^|\.)gethuminex\.com$/i.test(window.location.hostname);
+
+const hostedFallbackTenantId = isHostedOnHuminexDomain ? "798c33e1-22be-463e-be2f-2920646fa78c" : undefined;
+const hostedFallbackClientId = isHostedOnHuminexDomain ? "8585bece-66ed-405c-bfa5-568689345f91" : undefined;
+const hostedFallbackApiScope = isHostedOnHuminexDomain
+  ? "api://40efefe7-8bc1-4452-9261-8f1973a0b5fa/access_as_user"
+  : "api://huminex-api/access_as_user";
+
+const tenantId = (import.meta.env.VITE_AZURE_AD_TENANT_ID as string | undefined) ?? hostedFallbackTenantId;
+const clientId = (import.meta.env.VITE_AZURE_AD_CLIENT_ID as string | undefined) ?? hostedFallbackClientId;
+const apiScope = (import.meta.env.VITE_AZURE_AD_API_SCOPE as string | undefined) ?? hostedFallbackApiScope;
 const redirectUri = (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined) ?? window.location.origin;
 
 function isConfigured(value: string | undefined): boolean {
