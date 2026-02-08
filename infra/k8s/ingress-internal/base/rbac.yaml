@@ -5,6 +5,43 @@ metadata:
   namespace: ingress-nginx-internal
 
 ---
+# Namespace-scoped permissions (config, leader election, events)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ingress-nginx-internal
+  namespace: ingress-nginx-internal
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "pods", "secrets", "endpoints", "services", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "update", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ingress-nginx-internal
+  namespace: ingress-nginx-internal
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx-internal
+subjects:
+  - kind: ServiceAccount
+    name: ingress-nginx-internal
+    namespace: ingress-nginx-internal
+
+---
+# Cluster-scoped permissions (discover backends and update Ingress status)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -12,13 +49,16 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["configmaps", "endpoints", "nodes", "pods", "secrets", "services", "namespaces"]
-    verbs: ["list", "watch"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get"]
   - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses", "ingressclasses", "ingresses/status"]
-    verbs: ["get", "list", "watch", "update"]
+    resources: ["ingresses", "ingressclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses/status"]
+    verbs: ["update"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
