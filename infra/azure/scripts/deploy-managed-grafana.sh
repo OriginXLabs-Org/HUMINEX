@@ -44,9 +44,6 @@ if ! az grafana show -g "$RESOURCE_GROUP" -n "$NAME" >/dev/null 2>&1; then
       cost-center="$COST_CENTER" >/dev/null
 fi
 
-# Enable identity (needed for Azure Monitor datasources / RBAC).
-az grafana update -g "$RESOURCE_GROUP" -n "$NAME" --assign-identity >/dev/null
-
 GRAFANA_ID="$(az grafana show -g "$RESOURCE_GROUP" -n "$NAME" --query id -o tsv)"
 GRAFANA_URL="$(az grafana show -g "$RESOURCE_GROUP" -n "$NAME" --query properties.endpoint -o tsv)"
 
@@ -70,4 +67,3 @@ echo "Resource group: $RESOURCE_GROUP"
 echo "Subscription: $SUB_ID"
 echo "Portal: $PORTAL_URL"
 echo "Grafana URL: $GRAFANA_URL"
-
