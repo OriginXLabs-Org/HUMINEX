@@ -22,6 +22,12 @@ type EntraAuthContext = {
 };
 
 const SESSION_STORAGE_KEY = "huminex_api_session";
+const INTERNAL_ADMIN_EMAIL = "originxlabs@gmail.com";
+const LOCAL_BYPASS_ENABLED =
+  import.meta.env.DEV === true &&
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+  String(import.meta.env.VITE_ENABLE_LOCAL_INTERNAL_ADMIN_BYPASS ?? "true").toLowerCase() !== "false";
 
 class QueryBuilder implements PromiseLike<ApiResult<any>> {
   private readonly payload: ApiResult<any>;
@@ -106,6 +112,27 @@ function notify(event: string, session: AuthSession | null): void {
   }
 }
 
+function buildLocalInternalAdminSession(): AuthSession {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return {
+    access_token: "local-internal-admin-bypass-token",
+    refresh_token: "local-internal-admin-bypass-refresh",
+    expires_at: nowSeconds + 4 * 3600,
+    user: {
+      id: "00000000-0000-0000-0000-000000000001",
+      email: INTERNAL_ADMIN_EMAIL,
+      user_metadata: {
+        full_name: "Local Internal Admin",
+        role: "admin",
+        tenant_id: "11111111-1111-1111-1111-111111111111",
+        auth_methods: ["mfa"],
+        auth_strength: "local_bypass",
+        local_bypass: true,
+      },
+    },
+  };
+}
+
 function normalizeStringArrayClaim(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((item): item is string => typeof item === "string").map((item) => item.toLowerCase());
@@ -184,6 +211,16 @@ const auth = {
     return { data: { user: session?.user ?? null }, error: null };
   },
   async signInWithPassword(payload: { email: string; password: string }) {
+    if (
+      LOCAL_BYPASS_ENABLED &&
+      payload.email.trim().toLowerCase() === INTERNAL_ADMIN_EMAIL
+    ) {
+      const session = buildLocalInternalAdminSession();
+      saveStoredSession(session);
+      notify("SIGNED_IN", session);
+      return { data: { session, user: session.user }, error: null };
+    }
+
     try {
       const result = await loginWithMicrosoft(payload.email);
       const claims = (result.idTokenClaims ?? {}) as Record<string, unknown>;
@@ -223,6 +260,16 @@ const auth = {
     saveStoredSession(null);
     notify("SIGNED_OUT", null);
     return { error: null };
+  },
+  async enableLocalInternalAdminBypassSession() {
+    if (!LOCAL_BYPASS_ENABLED) {
+      return { data: { session: null, user: null }, error: new Error("Local internal admin bypass is disabled.") };
+    }
+
+    const session = buildLocalInternalAdminSession();
+    saveStoredSession(session);
+    notify("SIGNED_IN", session);
+    return { data: { session, user: session.user }, error: null };
   },
   async updateUser(_: unknown) {
     const session = readStoredSession();

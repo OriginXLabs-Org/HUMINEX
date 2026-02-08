@@ -74,6 +74,40 @@ export type AdminAuthAuditResponse = {
   message: string;
 };
 
+export type InternalAdminSummaryResponse = {
+  employerTenants: number;
+  employerAdmins: number;
+  totalEmployees: number;
+  auditEventsLast24Hours: number;
+  lastAuditAtUtc?: string | null;
+};
+
+export type EmployerOverviewResponse = {
+  id: string;
+  name: string;
+  slug: string;
+  tenantType: string;
+  status: string;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+  adminCount: number;
+  employeeCount: number;
+  contactEmail: string;
+};
+
+export type InternalAdminAuditLogResponse = {
+  id: string;
+  tenantId: string;
+  actorUserId: string;
+  actorEmail: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  outcome: string;
+  metadataJson: string;
+  occurredAtUtc: string;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api/v1";
 const SESSION_STORAGE_KEY = "huminex_api_session";
 
@@ -164,6 +198,16 @@ export const huminexApi = {
       method: "POST",
       body: JSON.stringify(request),
     }, accessToken),
+  getInternalAdminSummary: (accessToken?: string) =>
+    apiRequest<InternalAdminSummaryResponse>("/admin/internal/summary", {}, accessToken),
+  getInternalEmployers: (limit = 50, accessToken?: string) =>
+    apiRequest<EmployerOverviewResponse[]>(`/admin/internal/employers?limit=${limit}`, {}, accessToken),
+  getInternalAuditLogs: (limit = 100, sinceUtc?: string, accessToken?: string) =>
+    apiRequest<InternalAdminAuditLogResponse[]>(
+      `/admin/internal/audit-logs?limit=${limit}${sinceUtc ? `&sinceUtc=${encodeURIComponent(sinceUtc)}` : ""}`,
+      {},
+      accessToken
+    ),
   me: (accessToken?: string) => apiRequest<UserProfileResponse>("/users/me", {}, accessToken),
   updateUserRoles: (id: string, roles: string[], accessToken?: string) =>
     apiRequest<void>(`/users/${id}/roles`, {

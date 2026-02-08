@@ -21,7 +21,7 @@ import { WidgetLibrary } from "./WidgetLibrary";
 import { useDashboardLayout, WidgetConfig } from "@/hooks/useDashboardLayout";
 import { 
   useAdminStats, 
-  useRecentQuotes, 
+  useInternalAuditLogs,
   usePendingOnboardings, 
   useRecentTenants,
   useAdminRealtime 
@@ -47,6 +47,19 @@ interface Tenant {
   status: string;
   created_at: string;
   updated_at: string;
+  admin_count?: number;
+  employee_count?: number;
+  contact_email?: string;
+}
+
+interface InternalAuditLog {
+  id: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  actorEmail: string;
+  outcome: string;
+  occurredAt: string;
 }
 
 // Memoized stat card component
@@ -102,7 +115,7 @@ export const AdminOverview = () => {
 
   // Use optimized hooks with React Query
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useAdminStats();
-  const { data: recentQuotes, isLoading: quotesLoading } = useRecentQuotes(5);
+  const { data: internalAuditLogs, isLoading: auditLogsLoading } = useInternalAuditLogs(8);
   const { data: pendingOnboardings, isLoading: onboardingsLoading } = usePendingOnboardings(5);
   const { data: recentTenants, isLoading: tenantsLoading } = useRecentTenants(5);
 
@@ -126,15 +139,15 @@ export const AdminOverview = () => {
     [reorderWidgets, setIsDragging]
   );
 
-  const loading = statsLoading || quotesLoading || onboardingsLoading || tenantsLoading;
+  const loading = statsLoading || auditLogsLoading || onboardingsLoading || tenantsLoading;
 
   const statCards = useMemo(() => [
     { title: "Total Quotes", value: stats?.totalQuotes || 0, icon: FileText, color: "text-primary", bg: "bg-primary/10" },
     { title: "Pending Quotes", value: stats?.pendingQuotes || 0, icon: Clock, color: "text-yellow-600", bg: "bg-yellow-500/10" },
     { title: "Pending Onboarding", value: stats?.pendingOnboarding || 0, icon: UserPlus, color: "text-orange-600", bg: "bg-orange-500/10" },
     { title: "Active Tenants", value: stats?.activeTenants || 0, icon: Building2, color: "text-cyan-600", bg: "bg-cyan-500/10" },
-    { title: "Total Revenue", value: `₹${(stats?.totalRevenue || 0).toLocaleString()}`, icon: TrendingUp, color: "text-green-600", bg: "bg-green-500/10" },
-    { title: "Total Users", value: stats?.totalUsers || 0, icon: Users, color: "text-purple-600", bg: "bg-purple-500/10" },
+    { title: "Employees", value: stats?.totalEmployees || 0, icon: Users, color: "text-purple-600", bg: "bg-purple-500/10" },
+    { title: "Employer Admins", value: stats?.totalUsers || 0, icon: ShieldCheck, color: "text-green-600", bg: "bg-green-500/10" },
   ], [stats]);
 
   const systemHealthItems = [
@@ -376,7 +389,7 @@ export const AdminOverview = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Building2 className="h-5 w-5 text-cyan-600" />
-                  Recent Tenants
+                  Employer Organizations
                 </CardTitle>
                 <Link to="/admin/tenants">
                   <Button variant="ghost" size="sm" className="gap-1">
@@ -393,9 +406,13 @@ export const AdminOverview = () => {
                       <div key={tenant.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">{tenant.name}</p>
-                          <p className="text-sm text-muted-foreground truncate">
-                            @{tenant.slug} • {tenant.tenant_type}
+                          <p className="text-sm text-muted-foreground truncate">@{tenant.slug} • {tenant.tenant_type}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Admins {tenant.admin_count ?? 0} • Employees {tenant.employee_count ?? 0}
                           </p>
+                          {tenant.contact_email && (
+                            <p className="text-xs text-muted-foreground truncate">Contact {tenant.contact_email}</p>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             Updated {format(new Date(tenant.updated_at), 'MMM d, yyyy h:mm a')}
                           </p>
@@ -416,30 +433,30 @@ export const AdminOverview = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="h-5 w-5 text-primary" />
-                  Recent Quotes
+                  Real-time Internal Audit Logs
                 </CardTitle>
-                <Link to="/admin/quotes">
+                <Link to="/admin/audit">
                   <Button variant="ghost" size="sm" className="gap-1">
                     View All <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
               </CardHeader>
               <CardContent>
-                {(!recentQuotes || recentQuotes.length === 0) ? (
-                  <p className="text-muted-foreground text-center py-8">No quotes yet</p>
+                {(!internalAuditLogs || internalAuditLogs.length === 0) ? (
+                  <p className="text-muted-foreground text-center py-8">No audit events yet</p>
                 ) : (
                   <div className="space-y-3">
-                    {(recentQuotes || []).map((quote) => (
-                      <div key={quote.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
+                    {(internalAuditLogs || []).map((event: InternalAuditLog) => (
+                      <div key={event.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
                         <div>
-                          <p className="font-medium text-foreground">{quote.quote_number}</p>
+                          <p className="font-medium text-foreground">{event.action}</p>
                           <p className="text-sm text-muted-foreground">
-                            {quote.contact_name} • {quote.service_type?.replace('-', ' ')}
+                            {event.actorEmail} • {event.resourceType}:{event.resourceId}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium text-foreground">₹{Number(quote.final_price).toLocaleString()}</p>
-                          <Badge variant="outline" className="capitalize">{quote.status}</Badge>
+                          <p className="text-xs text-muted-foreground">{format(new Date(event.occurredAt), 'MMM d, HH:mm:ss')}</p>
+                          <Badge variant="outline" className="capitalize">{event.outcome}</Badge>
                         </div>
                       </div>
                     ))}

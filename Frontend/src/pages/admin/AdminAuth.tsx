@@ -12,6 +12,10 @@ const ADMIN_ROLES = new Set(["admin", "super_admin", "director"]);
 const INTERNAL_ADMIN_EMAIL = "originxlabs@gmail.com";
 const STRONG_AUTH_METHODS = new Set(["mfa", "fido", "rsa", "otp", "wia", "hwk", "x509"]);
 const ADMIN_AUDIT_STORAGE_KEY = "huminex_admin_auth_audit";
+const LOCAL_BYPASS_ENABLED =
+  import.meta.env.DEV === true &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+  String(import.meta.env.VITE_ENABLE_LOCAL_INTERNAL_ADMIN_BYPASS ?? "true").toLowerCase() !== "false";
 
 function hasStrongEntraVerification(userMetadata: Record<string, unknown> | undefined): boolean {
   const raw = userMetadata?.auth_methods;
@@ -93,17 +97,20 @@ const AdminAuth = () => {
 
     try {
       const configError = getEntraConfigError();
-      if (configError) {
+      if (configError && !LOCAL_BYPASS_ENABLED) {
         await captureAdminAudit("blocked", "entra_config_missing");
         toast.error(configError);
         return;
       }
 
       await captureAdminAudit("attempt", "interactive_login_started");
-      const { data, error } = await platform.auth.signInWithPassword({
-        email: INTERNAL_ADMIN_EMAIL,
-        password: "microsoft-entra",
-      });
+      const loginResult = LOCAL_BYPASS_ENABLED
+        ? await platform.auth.enableLocalInternalAdminBypassSession()
+        : await platform.auth.signInWithPassword({
+            email: INTERNAL_ADMIN_EMAIL,
+            password: "microsoft-entra",
+          });
+      const { data, error } = loginResult;
 
       if (error) {
         await captureAdminAudit("failure", "entra_auth_failed");
@@ -126,21 +133,23 @@ const AdminAuth = () => {
         return;
       }
 
-      const me = await huminexApi.me();
-      const role = (me.role || "").toLowerCase();
-      const profileEmail = (me.email || "").toLowerCase();
-      if (profileEmail !== INTERNAL_ADMIN_EMAIL) {
-        await captureAdminAudit("blocked", "profile_email_mismatch");
-        await platform.auth.signOut();
-        toast.error("Access denied. Internal admin profile verification failed.");
-        return;
-      }
+      if (!LOCAL_BYPASS_ENABLED) {
+        const me = await huminexApi.me();
+        const role = (me.role || "").toLowerCase();
+        const profileEmail = (me.email || "").toLowerCase();
+        if (profileEmail !== INTERNAL_ADMIN_EMAIL) {
+          await captureAdminAudit("blocked", "profile_email_mismatch");
+          await platform.auth.signOut();
+          toast.error("Access denied. Internal admin profile verification failed.");
+          return;
+        }
 
-      if (!ADMIN_ROLES.has(role)) {
-        await captureAdminAudit("blocked", "missing_admin_role");
-        await platform.auth.signOut();
-        toast.error("Access denied. Azure admin role privileges are required.");
-        return;
+        if (!ADMIN_ROLES.has(role)) {
+          await captureAdminAudit("blocked", "missing_admin_role");
+          await platform.auth.signOut();
+          toast.error("Access denied. Azure admin role privileges are required.");
+          return;
+        }
       }
 
       await captureAdminAudit("success", "interactive_login_completed");
@@ -196,6 +205,15 @@ const AdminAuth = () => {
           <div className="mb-6 rounded-xl border border-[#1E3A4A] bg-[#0A0F1C] px-4 py-3 text-xs text-[#A0B4B8]">
             Employer Admin access is separate and available via <span className="font-semibold text-white">/tenant/login</span>.
           </div>
+
+          {LOCAL_BYPASS_ENABLED && (
+            <div className="mb-6 rounded-xl border border-amber-400/40 bg-amber-950/40 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Local Bypass Active</p>
+              <p className="mt-1 text-xs text-amber-100/90">
+                Localhost testing mode is enabled. Microsoft Entra popup is bypassed only in local dev.
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-5">
             {entraConfigError && (

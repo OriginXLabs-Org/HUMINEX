@@ -6,11 +6,25 @@ export const useUserRole = () => {
   const { user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const localBypassEnabled =
+    import.meta.env.DEV === true &&
+    typeof window !== "undefined" &&
+    ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+    String(import.meta.env.VITE_ENABLE_LOCAL_INTERNAL_ADMIN_BYPASS ?? "true").toLowerCase() !== "false";
 
   useEffect(() => {
     const checkAdminRole = async () => {
       if (!user) {
         setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+
+      if (
+        localBypassEnabled &&
+        String(user.email || "").toLowerCase() === "originxlabs@gmail.com"
+      ) {
+        setIsAdmin(true);
         setLoading(false);
         return;
       }
@@ -28,7 +42,7 @@ export const useUserRole = () => {
     };
 
     checkAdminRole();
-  }, [user]);
+  }, [user, localBypassEnabled]);
 
   return { isAdmin, loading };
 };

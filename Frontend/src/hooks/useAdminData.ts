@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { platformClient as platform } from "@/integrations/platform/client";
+import { huminexApi } from "@/integrations/api/client";
 import { useEffect, useMemo } from "react";
 
 // Centralized admin data hooks with stale-while-revalidate caching
@@ -9,44 +10,43 @@ import { useEffect, useMemo } from "react";
 const STALE_TIME = 2 * 60 * 1000; // 2 minutes - data shown instantly, refreshed in background after this
 const CACHE_TIME = 30 * 60 * 1000; // 30 minutes - keep cached data for longer
 const BACKGROUND_REFETCH_INTERVAL = 5 * 60 * 1000; // 5 minutes - auto-refresh
+const LOCAL_BYPASS_ENABLED =
+  import.meta.env.DEV === true &&
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+  String(import.meta.env.VITE_ENABLE_LOCAL_INTERNAL_ADMIN_BYPASS ?? "true").toLowerCase() !== "false";
 
 // Stats hook for dashboard overview - stale-while-revalidate pattern
 export const useAdminStats = () => {
   return useQuery({
     queryKey: ["admin-stats"],
     queryFn: async () => {
-      // Parallel fetch all stats with optimized queries (head: true for count only)
-      const [
-        quotesResult,
-        pendingQuotesResult,
-        invoicesResult,
-        paidInvoicesResult,
-        usersResult,
-        inquiriesResult,
-        pendingOnboardingsResult,
-        activeTenantsResult,
-      ] = await Promise.all([
-        platform.from("quotes").select("*", { count: "exact", head: true }),
-        platform.from("quotes").select("*", { count: "exact", head: true }).eq("status", "pending"),
-        platform.from("invoices").select("*", { count: "exact", head: true }),
-        platform.from("invoices").select("total_amount").eq("status", "paid").limit(100),
-        platform.from("profiles").select("*", { count: "exact", head: true }),
-        platform.from("inquiries").select("*", { count: "exact", head: true }),
-        platform.from("onboarding_sessions").select("*", { count: "exact", head: true }).in("status", ["new", "pending", "pending_approval", "verified"]),
-        platform.from("client_tenants").select("*", { count: "exact", head: true }).eq("status", "active"),
-      ]);
+      if (LOCAL_BYPASS_ENABLED) {
+        return {
+          totalQuotes: 0,
+          pendingQuotes: 0,
+          totalInvoices: 0,
+          totalRevenue: 0,
+          totalUsers: 1,
+          totalInquiries: 0,
+          pendingOnboarding: 0,
+          activeTenants: 0,
+          totalEmployees: 0,
+        };
+      }
 
-      const totalRevenue = paidInvoicesResult.data?.reduce((sum, i) => sum + Number(i.total_amount || 0), 0) || 0;
+      const summary = await huminexApi.getInternalAdminSummary();
 
       return {
-        totalQuotes: quotesResult.count || 0,
-        pendingQuotes: pendingQuotesResult.count || 0,
-        totalInvoices: invoicesResult.count || 0,
-        totalRevenue,
-        totalUsers: usersResult.count || 0,
-        totalInquiries: inquiriesResult.count || 0,
-        pendingOnboarding: pendingOnboardingsResult.count || 0,
-        activeTenants: activeTenantsResult.count || 0,
+        totalQuotes: summary.auditEventsLast24Hours || 0,
+        pendingQuotes: 0,
+        totalInvoices: 0,
+        totalRevenue: 0,
+        totalUsers: summary.employerAdmins || 0,
+        totalInquiries: 0,
+        pendingOnboarding: 0,
+        activeTenants: summary.employerTenants || 0,
+        totalEmployees: summary.totalEmployees || 0,
       };
     },
     staleTime: STALE_TIME,
@@ -127,13 +127,23 @@ export const useRecentTenants = (limit = 5) => {
   return useQuery({
     queryKey: ["admin-recent-tenants", limit],
     queryFn: async () => {
-      const { data, error } = await platform
-        .from("client_tenants")
-        .select("id, name, slug, tenant_type, status, created_at, updated_at")
-        .order("updated_at", { ascending: false })
-        .limit(limit);
-      if (error) throw error;
-      return data || [];
+      if (LOCAL_BYPASS_ENABLED) {
+        return [];
+      }
+
+      const employers = await huminexApi.getInternalEmployers(limit);
+      return employers.map((item) => ({
+        id: item.id,
+        name: item.name,
+        slug: item.slug,
+        tenant_type: item.tenantType,
+        status: item.status,
+        created_at: item.createdAtUtc,
+        updated_at: item.updatedAtUtc,
+        admin_count: item.adminCount,
+        employee_count: item.employeeCount,
+        contact_email: item.contactEmail,
+      }));
     },
     staleTime: STALE_TIME,
     gcTime: CACHE_TIME,
@@ -169,18 +179,74 @@ export const useAuditLogs = (limit = 50) => {
   return useQuery({
     queryKey: ["admin-audit-logs", limit],
     queryFn: async () => {
-      const { data, error } = await platform
-        .from("audit_logs")
-        .select("id, action, entity_type, entity_id, user_id, created_at")
-        .order("created_at", { ascending: false })
-        .limit(limit);
-      if (error) throw error;
-      return data || [];
+      if (LOCAL_BYPASS_ENABLED) {
+        return [];
+      }
+
+      const logs = await huminexApi.getInternalAuditLogs(limit);
+      return logs.map((log) => ({
+        id: log.id,
+        action: log.action,
+        entity_type: log.resourceType,
+        entity_id: log.resourceId,
+        user_id: log.actorUserId,
+        tenant_id: log.tenantId,
+        actor_email: log.actorEmail,
+        outcome: log.outcome,
+        created_at: log.occurredAtUtc,
+        metadata_json: log.metadataJson,
+      }));
     },
     staleTime: STALE_TIME,
     gcTime: CACHE_TIME,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    refetchInterval: 10000,
+    placeholderData: (previousData) => previousData,
+  });
+};
+
+export const useInternalAuditLogs = (limit = 10) => {
+  return useQuery({
+    queryKey: ["admin-internal-audit-logs", limit],
+    queryFn: async () => {
+      if (LOCAL_BYPASS_ENABLED) {
+        try {
+          const raw = localStorage.getItem("huminex_admin_auth_audit");
+          const entries = raw ? (JSON.parse(raw) as Array<{ timestamp: string; portal: string; status: string; reason: string }>) : [];
+          return entries
+            .slice(-limit)
+            .reverse()
+            .map((event, index) => ({
+              id: `local-${index}-${event.timestamp}`,
+              action: "admin_auth_login",
+              resourceType: event.portal || "internal_admin",
+              resourceId: "/admin/login",
+              actorEmail: "originxlabs@gmail.com",
+              outcome: event.status || "attempt",
+              occurredAt: event.timestamp,
+            }));
+        } catch {
+          return [];
+        }
+      }
+
+      const logs = await huminexApi.getInternalAuditLogs(limit);
+      return logs.map((log) => ({
+        id: log.id,
+        action: log.action,
+        resourceType: log.resourceType,
+        resourceId: log.resourceId,
+        actorEmail: log.actorEmail,
+        outcome: log.outcome,
+        occurredAt: log.occurredAtUtc,
+      }));
+    },
+    staleTime: 5000,
+    gcTime: CACHE_TIME,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchInterval: 10000,
     placeholderData: (previousData) => previousData,
   });
 };
