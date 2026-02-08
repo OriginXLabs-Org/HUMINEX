@@ -18,6 +18,29 @@ export type UserProfileResponse = {
   role: string;
 };
 
+export type RoleResponse = {
+  roleId: string;
+  name: string;
+  description: string;
+  userCount: number;
+};
+
+export type AccessReviewUserResponse = {
+  userId: string;
+  name: string;
+  email: string;
+  roles: string[];
+  lastActivityAtUtc?: string | null;
+};
+
+export type IdentityAccessMetricsResponse = {
+  totalUsers: number;
+  activeUsersLast24Hours: number;
+  totalRoles: number;
+  totalPolicies: number;
+  usersWithoutRoles: number;
+};
+
 export type OrgNodeDto = {
   employeeId: string;
   name: string;
@@ -640,6 +663,47 @@ export const huminexApi = {
       accessToken
     ),
   me: (accessToken?: string) => apiRequest<UserProfileResponse>("/users/me", {}, accessToken),
+  getRoles: (accessToken?: string) =>
+    apiRequest<RoleResponse[]>("/rbac/roles", {}, accessToken),
+  createRole: (name: string, description: string, accessToken?: string) =>
+    apiRequest<RoleResponse>(
+      "/rbac/roles",
+      {
+        method: "POST",
+        body: JSON.stringify({ name, description }),
+      },
+      accessToken
+    ),
+  updateRole: (roleId: string, name: string, description: string, accessToken?: string) =>
+    apiRequest<RoleResponse>(
+      `/rbac/roles/${roleId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ name, description }),
+      },
+      accessToken
+    ),
+  deleteRole: (roleId: string, accessToken?: string) =>
+    apiRequest<void>(`/rbac/roles/${roleId}`, { method: "DELETE" }, accessToken),
+  getPolicies: (accessToken?: string) =>
+    apiRequest<{ policyId: string; name: string; permissions: string[] }[]>("/rbac/policies", {}, accessToken),
+  updatePolicy: (policyId: string, permissions: string[], accessToken?: string) =>
+    apiRequest<void>(
+      `/rbac/policies/${encodeURIComponent(policyId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ permissions }),
+      },
+      accessToken
+    ),
+  getAccessReview: (limit = 100, accessToken?: string) =>
+    apiRequest<AccessReviewUserResponse[]>(
+      `/rbac/access-review?limit=${limit}`,
+      {},
+      accessToken
+    ),
+  getIdentityAccessMetrics: (accessToken?: string) =>
+    apiRequest<IdentityAccessMetricsResponse>("/rbac/metrics", {}, accessToken),
   updateUserRoles: (id: string, roles: string[], accessToken?: string) =>
     apiRequest<void>(`/users/${id}/roles`, {
       method: "PUT",

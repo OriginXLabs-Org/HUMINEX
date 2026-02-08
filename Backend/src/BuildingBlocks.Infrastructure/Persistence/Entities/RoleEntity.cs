@@ -18,4 +18,10 @@ public sealed class RoleEntity : Entity, ITenantEntity
         Name = name.Trim().ToLowerInvariant();
         Description = description;
     }
+
+    public void Update(string name, string description)
+    {
+        Name = name.Trim().ToLowerInvariant();
+        Description = description.Trim();
+    }
 }

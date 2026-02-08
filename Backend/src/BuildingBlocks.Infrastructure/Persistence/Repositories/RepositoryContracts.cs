@@ -3,6 +3,9 @@ using Huminex.BuildingBlocks.Infrastructure.Persistence.Entities;
 namespace Huminex.BuildingBlocks.Infrastructure.Persistence.Repositories;
 
 public sealed record PolicyProjection(string PolicyId, string Name, IReadOnlyCollection<string> Permissions);
+public sealed record RoleProjection(Guid RoleId, string Name, string Description, int UserCount);
+public sealed record AccessReviewProjection(Guid UserId, string Name, string Email, IReadOnlyCollection<string> Roles, DateTime? LastActivityAtUtc);
+public sealed record IdentityAccessMetricsProjection(int TotalUsers, int ActiveUsersLast24Hours, int TotalRoles, int TotalPolicies, int UsersWithoutRoles);
 
 public interface IUserRepository
 {
@@ -17,6 +20,12 @@ public interface IRbacRepository
 {
     Task<IReadOnlyCollection<PolicyProjection>> GetPoliciesAsync(CancellationToken cancellationToken = default);
     Task UpsertPolicyAsync(string policyId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<RoleProjection>> GetRolesAsync(CancellationToken cancellationToken = default);
+    Task<RoleProjection> CreateRoleAsync(string name, string description, CancellationToken cancellationToken = default);
+    Task<RoleProjection?> UpdateRoleAsync(Guid roleId, string name, string description, CancellationToken cancellationToken = default);
+    Task<bool> DeleteRoleAsync(Guid roleId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<AccessReviewProjection>> GetAccessReviewAsync(int limit, CancellationToken cancellationToken = default);
+    Task<IdentityAccessMetricsProjection> GetIdentityMetricsAsync(CancellationToken cancellationToken = default);
 }
 
 public interface IOrganizationRepository

@@ -128,6 +128,153 @@ public sealed class RbacRepository(AppDbContext dbContext, ITenantProvider tenan
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyCollection<RoleProjection>> GetRolesAsync(CancellationToken cancellationToken = default)
+    {
+        var roles = await dbContext.Roles
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+        var roleAssignmentCounts = await dbContext.UserRoles
+            .GroupBy(x => x.RoleId)
+            .Select(group => new { RoleId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(x => x.RoleId, x => x.Count, cancellationToken);
+
+        return roles
+            .Select(role => new RoleProjection(
+                role.Id,
+                role.Name,
+                role.Description,
+                roleAssignmentCounts.TryGetValue(role.Id, out var count) ? count : 0))
+            .ToArray();
+    }
+
+    public async Task<RoleProjection> CreateRoleAsync(string name, string description, CancellationToken cancellationToken = default)
+    {
+        var normalizedName = name.Trim().ToLowerInvariant();
+        var trimmedDescription = description.Trim();
+
+        var existing = await dbContext.Roles.FirstOrDefaultAsync(x => x.Name == normalizedName, cancellationToken);
+        if (existing is not null)
+        {
+            var existingUserCount = await dbContext.UserRoles.CountAsync(x => x.RoleId == existing.Id, cancellationToken);
+            return new RoleProjection(existing.Id, existing.Name, existing.Description, existingUserCount);
+        }
+
+        var role = new RoleEntity(tenantProvider.TenantId, normalizedName, trimmedDescription);
+        dbContext.Roles.Add(role);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new RoleProjection(role.Id, role.Name, role.Description, 0);
+    }
+
+    public async Task<RoleProjection?> UpdateRoleAsync(Guid roleId, string name, string description, CancellationToken cancellationToken = default)
+    {
+        var role = await dbContext.Roles.FirstOrDefaultAsync(x => x.Id == roleId, cancellationToken);
+        if (role is null)
+        {
+            return null;
+        }
+
+        var normalizedName = name.Trim().ToLowerInvariant();
+        var trimmedDescription = description.Trim();
+
+        var duplicateName = await dbContext.Roles
+            .AnyAsync(x => x.Id != roleId && x.Name == normalizedName, cancellationToken);
+
+        if (duplicateName)
+        {
+            return null;
+        }
+
+        role.Update(normalizedName, trimmedDescription);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var userCount = await dbContext.UserRoles.CountAsync(x => x.RoleId == roleId, cancellationToken);
+        return new RoleProjection(role.Id, role.Name, role.Description, userCount);
+    }
+
+    public async Task<bool> DeleteRoleAsync(Guid roleId, CancellationToken cancellationToken = default)
+    {
+        var role = await dbContext.Roles.FirstOrDefaultAsync(x => x.Id == roleId, cancellationToken);
+        if (role is null)
+        {
+            return false;
+        }
+
+        var isAssigned = await dbContext.UserRoles.AnyAsync(x => x.RoleId == roleId, cancellationToken);
+        if (isAssigned)
+        {
+            return false;
+        }
+
+        dbContext.Roles.Remove(role);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<IReadOnlyCollection<AccessReviewProjection>> GetAccessReviewAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        var boundedLimit = Math.Clamp(limit, 1, 500);
+        var users = await dbContext.Users
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+
+        var userIds = users.Select(x => x.Id).ToArray();
+
+        var roleAssignments = await (
+            from ur in dbContext.UserRoles
+            join role in dbContext.Roles on ur.RoleId equals role.Id
+            where userIds.Contains(ur.UserId)
+            select new { ur.UserId, role.Name }
+        ).ToListAsync(cancellationToken);
+
+        var lastActivityMap = await dbContext.AuditTrails
+            .Where(x => userIds.Contains(x.ActorUserId))
+            .GroupBy(x => x.ActorUserId)
+            .Select(group => new { UserId = group.Key, LastActivityAtUtc = group.Max(x => x.OccurredAtUtc) })
+            .ToDictionaryAsync(x => x.UserId, x => (DateTime?)x.LastActivityAtUtc, cancellationToken);
+
+        var roleMap = roleAssignments
+            .GroupBy(x => x.UserId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyCollection<string>)group.Select(x => x.Name).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToArray());
+
+        return users
+            .Select(user => new AccessReviewProjection(
+                user.Id,
+                user.DisplayName,
+                user.Email,
+                roleMap.TryGetValue(user.Id, out var roles) ? roles : [],
+                lastActivityMap.TryGetValue(user.Id, out var lastActivityAtUtc) ? lastActivityAtUtc : null))
+            .ToArray();
+    }
+
+    public async Task<IdentityAccessMetricsProjection> GetIdentityMetricsAsync(CancellationToken cancellationToken = default)
+    {
+        var since = DateTime.UtcNow.AddHours(-24);
+
+        var totalUsers = await dbContext.Users.CountAsync(cancellationToken);
+        var activeUsersLast24h = await dbContext.AuditTrails
+            .Where(x => x.OccurredAtUtc >= since)
+            .Select(x => x.ActorUserId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        var totalRoles = await dbContext.Roles.CountAsync(cancellationToken);
+        var totalPolicies = await dbContext.PermissionPolicies.CountAsync(cancellationToken);
+
+        var usersWithRoles = await dbContext.UserRoles
+            .Select(x => x.UserId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        var usersWithoutRoles = Math.Max(totalUsers - usersWithRoles, 0);
+
+        return new IdentityAccessMetricsProjection(totalUsers, activeUsersLast24h, totalRoles, totalPolicies, usersWithoutRoles);
+    }
 }
 
 public sealed class OrganizationRepository(AppDbContext dbContext) : IOrganizationRepository
