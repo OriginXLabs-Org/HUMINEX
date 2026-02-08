@@ -26,89 +26,113 @@ jobs:
         run: |
           if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
             echo "Missing required secret: SLACK_WEBHOOK_URL"
-            echo "Configure Incoming Webhook URL in repository secrets."
             exit 1
           fi
 
-      - name: Build pipeline activity report
-        id: report
+      - name: Send compact pipeline card to Slack
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          TRIGGER_WORKFLOW: ${{ github.event.workflow_run.name }}
-          TRIGGER_STATUS: ${{ github.event.workflow_run.conclusion }}
-          TRIGGER_URL: ${{ github.event.workflow_run.html_url }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_CHANNEL_MENTION: ${{ secrets.SLACK_CHANNEL_MENTION }}
         run: |
           set -euo pipefail
 
-          WORKFLOW_FILES=(
-            "backend-ci.yml"
-            "backend-image-push.yml"
-            "frontend-ci.yml"
-            "e2e-playwright.yml"
-            "codeql.yml"
-            "infra-deploy.yml"
-          )
+          now_utc="$(date -u +"%Y-%m-%d %H:%M UTC")"
+          actions_url="https://github.com/${REPO}/actions"
 
-          WORKFLOW_LABELS=(
-            "Backend CI"
-            "Backend Image Push (CD)"
-            "Frontend CI"
-            "E2E Playwright"
-            "CodeQL"
-            "Infra Deploy (CD)"
-          )
-
-          NOW_UTC="$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
-          REPORT="${SLACK_CHANNEL_MENTION}\n*HUMINEX Pipeline Status Report*\nTime: ${NOW_UTC}\nRepository: https://github.com/${REPO}\nActions: https://github.com/${REPO}/actions"
-
-          if [ -n "${TRIGGER_WORKFLOW}" ] && [ -n "${TRIGGER_STATUS}" ] && [ -n "${TRIGGER_URL}" ]; then
-            REPORT="${REPORT}\nTriggered by: *${TRIGGER_WORKFLOW}* -> *${TRIGGER_STATUS}* (<${TRIGGER_URL}|view run>)"
-          fi
-
-          for i in "${!WORKFLOW_FILES[@]}"; do
-            WF_FILE="${WORKFLOW_FILES[$i]}"
-            WF_LABEL="${WORKFLOW_LABELS[$i]}"
-
-            RUNS_JSON="$(curl -fsSL \
+          get_latest_run() {
+            local workflow_file="$1"
+            curl -fsSL \
               -H "Authorization: Bearer ${GH_TOKEN}" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${REPO}/actions/workflows/${WF_FILE}/runs?per_page=5")"
+              "https://api.github.com/repos/${REPO}/actions/workflows/${workflow_file}/runs?per_page=1"
+          }
 
-            LATEST_STATUS="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].status // "unknown"')"
-            LATEST_CONCLUSION="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].conclusion // "n/a"')"
-            LATEST_BRANCH="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].head_branch // "n/a"')"
-            LATEST_SHA="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].head_sha // "n/a"' | cut -c1-7)"
-            LATEST_UPDATED="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].updated_at // "n/a"')"
-            LATEST_URL="$(echo "${RUNS_JSON}" | jq -r '.workflow_runs[0].html_url // ""')"
+          status_emoji() {
+            local status="$1"
+            local conclusion="$2"
+            if [ "$status" = "in_progress" ]; then echo "🟡"; return; fi
+            if [ "$status" = "queued" ]; then echo "🔵"; return; fi
+            case "$conclusion" in
+              success) echo "🟢" ;;
+              failure) echo "🔴" ;;
+              cancelled) echo "⚫" ;;
+              skipped) echo "⚪" ;;
+              *) echo "⚪" ;;
+            esac
+          }
 
-            ACTIVITY_LINES="$(echo "${RUNS_JSON}" | jq -r '
-              .workflow_runs
-              | map("  - #\(.run_number) | \(.event) | \(.status)/\(.conclusion // "n/a") | \(.head_branch) | \(.updated_at) | \(.html_url)")
-              | join("\n")
-            ')"
+          status_label() {
+            local status="$1"
+            local conclusion="$2"
+            if [ "$status" = "in_progress" ]; then echo "Running"; return; fi
+            if [ "$status" = "queued" ]; then echo "Queued"; return; fi
+            case "$conclusion" in
+              success) echo "Success" ;;
+              failure) echo "Failed" ;;
+              cancelled) echo "Cancelled" ;;
+              skipped) echo "Skipped" ;;
+              *) echo "Unknown" ;;
+            esac
+          }
 
-            REPORT="${REPORT}\n\n*${WF_LABEL}*"
-            REPORT="${REPORT}\nLatest: ${LATEST_STATUS}/${LATEST_CONCLUSION} | branch=${LATEST_BRANCH} | sha=${LATEST_SHA} | updated=${LATEST_UPDATED}"
-            if [ -n "${LATEST_URL}" ]; then
-              REPORT="${REPORT}\nLatest Run URL: ${LATEST_URL}"
-            fi
-            REPORT="${REPORT}\nRecent Activity:\n${ACTIVITY_LINES}"
+          workflows=(
+            "frontend-ci.yml|Frontend CI"
+            "backend-ci.yml|Backend CI"
+            "backend-image-push.yml|Backend Image Push"
+            "e2e-playwright.yml|E2E Playwright"
+            "codeql.yml|CodeQL"
+            "infra-deploy.yml|Infra Deploy"
+          )
+
+          blocks='[]'
+
+          if [ -n "${SLACK_CHANNEL_MENTION:-}" ]; then
+            blocks=$(echo "$blocks" | jq --arg mention "$SLACK_CHANNEL_MENTION" '. + [{"type":"section","text":{"type":"mrkdwn","text":$mention}}]')
+          fi
+
+          blocks=$(echo "$blocks" | jq --arg now "$now_utc" --arg repo "$REPO" --arg actions "$actions_url" '
+            . + [
+              {"type":"header","text":{"type":"plain_text","text":"HUMINEX CI/CD Snapshot"}},
+              {"type":"context","elements":[
+                {"type":"mrkdwn","text":("*Repo:* " + $repo)},
+                {"type":"mrkdwn","text":("*Time:* " + $now)},
+                {"type":"mrkdwn","text":("<" + $actions + "|Open GitHub Actions>")}
+              ]},
+              {"type":"divider"}
+            ]
+          ')
+
+          for item in "${workflows[@]}"; do
+            wf_file="${item%%|*}"
+            wf_name="${item##*|}"
+
+            run_json="$(get_latest_run "$wf_file")"
+            status="$(echo "$run_json" | jq -r '.workflow_runs[0].status // "unknown"')"
+            conclusion="$(echo "$run_json" | jq -r '.workflow_runs[0].conclusion // "unknown"')"
+            branch="$(echo "$run_json" | jq -r '.workflow_runs[0].head_branch // "-"')"
+            run_no="$(echo "$run_json" | jq -r '.workflow_runs[0].run_number // 0')"
+            url="$(echo "$run_json" | jq -r '.workflow_runs[0].html_url // "https://github.com/'"${REPO}"'/actions"')"
+
+            emoji="$(status_emoji "$status" "$conclusion")"
+            label="$(status_label "$status" "$conclusion")"
+
+            blocks=$(echo "$blocks" | jq \
+              --arg wf "$wf_name" \
+              --arg branch "$branch" \
+              --arg run_no "$run_no" \
+              --arg emoji "$emoji" \
+              --arg label "$label" \
+              --arg url "$url" '
+                . + [
+                  {"type":"section","text":{"type":"mrkdwn","text":("*" + $wf + "*\n" + $emoji + " *" + $label + "*  •  branch: `" + $branch + "`  •  run: #" + $run_no)}},
+                  {"type":"actions","elements":[{"type":"button","text":{"type":"plain_text","text":"Navigate"},"url":$url}]},
+                  {"type":"divider"}
+                ]
+              ')
           done
 
-          {
-            echo "text<<EOF"
-            echo -e "${REPORT}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Send report to Slack
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          REPORT_TEXT: ${{ steps.report.outputs.text }}
-        run: |
-          set -euo pipefail
-          PAYLOAD="$(jq -n --arg text "${REPORT_TEXT}" '{text: $text}')"
-          curl -fsSL -X POST -H "Content-Type: application/json" --data "${PAYLOAD}" "${SLACK_WEBHOOK_URL}" >/dev/null
-          echo "Slack pipeline report sent successfully."
+          payload=$(jq -n --arg text "HUMINEX CI/CD Snapshot" --argjson blocks "$blocks" '{text:$text, blocks:$blocks}')
+          curl -fsSL -X POST -H "Content-Type: application/json" --data "$payload" "$SLACK_WEBHOOK_URL" >/dev/null
+          echo "Slack snapshot sent successfully."
