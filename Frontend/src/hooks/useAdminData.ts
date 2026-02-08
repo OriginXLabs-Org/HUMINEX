@@ -251,6 +251,66 @@ export const useInternalAuditLogs = (limit = 10) => {
   });
 };
 
+export const useInternalSystemLogs = (level = "all", limit = 200) => {
+  return useQuery({
+    queryKey: ["admin-internal-system-logs", level, limit],
+    queryFn: async () => {
+      if (LOCAL_BYPASS_ENABLED) {
+        return [];
+      }
+
+      const logs = await huminexApi.getInternalSystemLogs(level, limit);
+      return logs.map((log) => ({
+        id: log.id,
+        level: log.level,
+        source: log.source,
+        message: log.message,
+        metadataJson: log.metadataJson,
+        createdAt: log.createdAtUtc,
+      }));
+    },
+    staleTime: 5000,
+    gcTime: CACHE_TIME,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchInterval: 10000,
+    placeholderData: (previousData) => previousData,
+  });
+};
+
+export const useInternalSystemHealth = () => {
+  return useQuery({
+    queryKey: ["admin-internal-system-health"],
+    queryFn: async () => {
+      if (LOCAL_BYPASS_ENABLED) {
+        return {
+          status: "healthy",
+          checkedAtUtc: new Date().toISOString(),
+          checks: [] as Array<{ name: string; status: string; latency: string; description: string }>,
+        };
+      }
+
+      const health = await huminexApi.getInternalSystemHealth();
+      return {
+        status: health.status,
+        checkedAtUtc: health.checkedAtUtc,
+        checks: health.checks.map((check) => ({
+          name: check.name,
+          status: check.status,
+          latency: check.latency,
+          description: check.description,
+        })),
+      };
+    },
+    staleTime: 5000,
+    gcTime: CACHE_TIME,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchInterval: 15000,
+    placeholderData: (previousData) => previousData,
+  });
+};
+
 // Clickstream events hook - stale-while-revalidate with aggressive caching
 export const useClickstreamEvents = (
   eventFilter: string = "all",

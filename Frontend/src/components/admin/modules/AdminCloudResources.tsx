@@ -1,61 +1,142 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Cloud, 
-  Server, 
-  Database, 
-  HardDrive,
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import {
+  Cloud,
+  Server,
+  Database,
   Cpu,
-  MemoryStick,
   Globe,
   Zap,
   DollarSign,
-  TrendingUp,
-  TrendingDown,
   RefreshCw,
   Settings,
+  CheckCircle2,
   AlertTriangle,
-  CheckCircle2
-} from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-
-const usageData = Array.from({ length: 7 }, (_, i) => ({
-  day: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i],
-  compute: Math.floor(Math.random() * 40) + 60,
-  storage: Math.floor(Math.random() * 20) + 30,
-  bandwidth: Math.floor(Math.random() * 30) + 20
-}));
-
-const costBreakdown = [
-  { name: 'Compute', value: 45, color: 'hsl(262, 83%, 58%)' },
-  { name: 'Storage', value: 25, color: 'hsl(188, 94%, 43%)' },
-  { name: 'Bandwidth', value: 15, color: 'hsl(160, 84%, 39%)' },
-  { name: 'Database', value: 15, color: 'hsl(330, 81%, 60%)' },
-];
-
-const resources = [
-  { id: 1, name: 'Primary Database', type: 'PostgreSQL', region: 'Asia South (Mumbai)', status: 'healthy', cpu: 45, memory: 68, storage: 42 },
-  { id: 2, name: 'Redis Cache', type: 'Redis 7.0', region: 'Asia South (Mumbai)', status: 'healthy', cpu: 12, memory: 35, storage: 15 },
-  { id: 3, name: 'Edge Functions', type: 'Deno Runtime', region: 'Global CDN', status: 'healthy', cpu: 28, memory: 42, storage: 5 },
-  { id: 4, name: 'File Storage', type: 'S3 Compatible', region: 'Asia South (Mumbai)', status: 'healthy', cpu: 0, memory: 0, storage: 28 },
-  { id: 5, name: 'Realtime Server', type: 'WebSocket', region: 'Asia South (Mumbai)', status: 'healthy', cpu: 22, memory: 38, storage: 2 },
-];
+} from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { huminexApi, type InternalAdminInvoiceResponse, type InternalSystemHealthResponse, type InternalSystemLogResponse } from "@/integrations/api/client";
+import { toast } from "sonner";
 
 export const AdminCloudResources = () => {
   const [refreshing, setRefreshing] = useState(false);
+  const [health, setHealth] = useState<InternalSystemHealthResponse | null>(null);
+  const [systemLogs, setSystemLogs] = useState<InternalSystemLogResponse[]>([]);
+  const [invoices, setInvoices] = useState<InternalAdminInvoiceResponse[]>([]);
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
+    try {
+      const [healthData, logs, invoiceData] = await Promise.all([
+        huminexApi.getInternalSystemHealth(),
+        huminexApi.getInternalSystemLogs("all", 1000),
+        huminexApi.getInternalInvoices(500, "all"),
+      ]);
+      setHealth(healthData);
+      setSystemLogs(logs || []);
+      setInvoices(invoiceData || []);
+    } catch (error) {
+      console.error("Failed to load cloud resources", error);
+      toast.error("Failed to load cloud resources data");
+    } finally {
+      setRefreshing(false);
+    }
   };
+
+  useEffect(() => {
+    void handleRefresh();
+  }, []);
+
+  const usageData = useMemo(() => {
+    const dayKeys = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      d.setHours(0, 0, 0, 0);
+      return d;
+    });
+
+    const daily = dayKeys.map((d) => ({
+      day: d.toLocaleString("en-US", { weekday: "short" }),
+      compute: 0,
+      storage: 0,
+      bandwidth: 0,
+    }));
+
+    for (const log of systemLogs) {
+      const t = new Date(log.createdAtUtc);
+      const idx = dayKeys.findIndex((d, i) => {
+        const next = dayKeys[i + 1];
+        return t >= d && (!next || t < next);
+      });
+      if (idx < 0) continue;
+
+      if (log.level === "info") daily[idx].compute += 1;
+      if (log.level === "warning") daily[idx].storage += 1;
+      if (log.level === "error") daily[idx].bandwidth += 1;
+    }
+
+    const normalize = (value: number, max: number) => (max <= 0 ? 0 : Math.round((value * 100) / max));
+    const maxCompute = Math.max(...daily.map((d) => d.compute), 1);
+    const maxStorage = Math.max(...daily.map((d) => d.storage), 1);
+    const maxBandwidth = Math.max(...daily.map((d) => d.bandwidth), 1);
+
+    return daily.map((d) => ({
+      day: d.day,
+      compute: normalize(d.compute, maxCompute),
+      storage: normalize(d.storage, maxStorage),
+      bandwidth: normalize(d.bandwidth, maxBandwidth),
+    }));
+  }, [systemLogs]);
+
+  const monthlyInvoices = useMemo(() => {
+    const now = new Date();
+    return invoices.filter((invoice) => {
+      const d = new Date(invoice.createdAtUtc);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+  }, [invoices]);
+
+  const monthlyAmount = monthlyInvoices.reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0);
+
+  const costBreakdown = useMemo(() => {
+    const paid = invoices.filter((x) => x.status === "paid").reduce((sum, x) => sum + Number(x.totalAmount || 0), 0);
+    const sent = invoices.filter((x) => x.status === "sent").reduce((sum, x) => sum + Number(x.totalAmount || 0), 0);
+    const overdue = invoices.filter((x) => x.status === "overdue").reduce((sum, x) => sum + Number(x.totalAmount || 0), 0);
+    const draft = invoices.filter((x) => x.status === "draft").reduce((sum, x) => sum + Number(x.totalAmount || 0), 0);
+
+    const total = Math.max(1, paid + sent + overdue + draft);
+    return [
+      { name: "Paid", value: Math.round((paid * 100) / total), color: "hsl(160, 84%, 39%)", amount: paid },
+      { name: "Sent", value: Math.round((sent * 100) / total), color: "hsl(188, 94%, 43%)", amount: sent },
+      { name: "Overdue", value: Math.round((overdue * 100) / total), color: "hsl(0, 84%, 60%)", amount: overdue },
+      { name: "Draft", value: Math.round((draft * 100) / total), color: "hsl(262, 83%, 58%)", amount: draft },
+    ];
+  }, [invoices]);
+
+  const resources = useMemo(() => {
+    return (health?.checks || []).map((check, index) => {
+      const ms = Number.parseInt(String(check.latency).replace("ms", ""), 10);
+      const load = Number.isNaN(ms) ? 0 : Math.min(100, Math.max(0, ms));
+      return {
+        id: index + 1,
+        name: check.name,
+        type: check.description || "Service Check",
+        region: "Platform",
+        status: check.status,
+        load,
+      };
+    });
+  }, [health]);
+
+  const healthyCount = (health?.checks || []).filter((x) => x.status === "healthy").length;
+  const totalChecks = Math.max(1, (health?.checks || []).length);
+  const uptimePercent = ((healthyCount * 100) / totalChecks).toFixed(2);
+  const warningOrError = systemLogs.filter((x) => x.level === "warning" || x.level === "error").length;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="p-3 rounded-xl bg-blue-500/10">
@@ -63,33 +144,30 @@ export const AdminCloudResources = () => {
           </div>
           <div>
             <h1 className="text-2xl font-heading font-bold text-foreground">Cloud Resources</h1>
-            <p className="text-muted-foreground">Infrastructure and resource management</p>
+            <p className="text-muted-foreground">Live platform health and operational telemetry</p>
           </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button>
+          <Button variant="outline">
             <Settings className="w-4 h-4 mr-2" />
             Settings
           </Button>
         </div>
       </div>
 
-      {/* Overview Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-500/10 to-transparent border-blue-500/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-blue-500 mb-2">
               <DollarSign className="w-4 h-4" />
-              <span className="text-xs font-medium">Monthly Cost</span>
+              <span className="text-xs font-medium">Monthly Billed</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">$487</p>
-            <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
-              <TrendingDown className="w-3 h-3" /> -8% from last month
-            </p>
+            <p className="text-2xl font-bold text-foreground">₹{monthlyAmount.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground mt-1">From invoices this month</p>
           </CardContent>
         </Card>
 
@@ -99,8 +177,8 @@ export const AdminCloudResources = () => {
               <Server className="w-4 h-4" />
               <span className="text-xs font-medium">Active Services</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">5</p>
-            <p className="text-xs text-muted-foreground mt-1">All healthy</p>
+            <p className="text-2xl font-bold text-foreground">{resources.length}</p>
+            <p className="text-xs text-muted-foreground mt-1">From health checks</p>
           </CardContent>
         </Card>
 
@@ -108,10 +186,10 @@ export const AdminCloudResources = () => {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-cyan-500 mb-2">
               <Globe className="w-4 h-4" />
-              <span className="text-xs font-medium">Regions</span>
+              <span className="text-xs font-medium">Healthy Checks</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">3</p>
-            <p className="text-xs text-muted-foreground mt-1">India, Singapore, US</p>
+            <p className="text-2xl font-bold text-foreground">{healthyCount}/{totalChecks}</p>
+            <p className="text-xs text-muted-foreground mt-1">Current status</p>
           </CardContent>
         </Card>
 
@@ -119,20 +197,19 @@ export const AdminCloudResources = () => {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-green-500 mb-2">
               <Zap className="w-4 h-4" />
-              <span className="text-xs font-medium">Uptime</span>
+              <span className="text-xs font-medium">Service Uptime</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">99.99%</p>
-            <p className="text-xs text-muted-foreground mt-1">Last 30 days</p>
+            <p className="text-2xl font-bold text-foreground">{uptimePercent}%</p>
+            <p className="text-xs text-muted-foreground mt-1">Based on check health</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Resource Usage Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Resource Usage (7 Days)</CardTitle>
-            <CardDescription>Compute, storage, and bandwidth utilization</CardDescription>
+            <CardTitle>Operational Signal (7 Days)</CardTitle>
+            <CardDescription>Normalized system log levels by day</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[280px]">
@@ -140,51 +217,43 @@ export const AdminCloudResources = () => {
                 <AreaChart data={usageData}>
                   <defs>
                     <linearGradient id="computeGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(262, 83%, 58%)" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(262, 83%, 58%)" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="hsl(262, 83%, 58%)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(262, 83%, 58%)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="storageGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(188, 94%, 43%)" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(188, 94%, 43%)" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="hsl(188, 94%, 43%)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(188, 94%, 43%)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(190, 15%, 20%)" />
                   <XAxis dataKey="day" stroke="hsl(190, 30%, 40%)" fontSize={12} />
                   <YAxis stroke="hsl(190, 30%, 40%)" fontSize={12} unit="%" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(190, 40%, 12%)', 
-                      border: '1px solid hsl(190, 25%, 22%)',
-                      borderRadius: '8px'
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(190, 40%, 12%)",
+                      border: "1px solid hsl(190, 25%, 22%)",
+                      borderRadius: "8px",
                     }}
                   />
-                  <Area type="monotone" dataKey="compute" name="Compute" stroke="hsl(262, 83%, 58%)" fill="url(#computeGrad)" />
-                  <Area type="monotone" dataKey="storage" name="Storage" stroke="hsl(188, 94%, 43%)" fill="url(#storageGrad)" />
+                  <Area type="monotone" dataKey="compute" name="Info" stroke="hsl(262, 83%, 58%)" fill="url(#computeGrad)" />
+                  <Area type="monotone" dataKey="storage" name="Warning" stroke="hsl(188, 94%, 43%)" fill="url(#storageGrad)" />
+                  <Area type="monotone" dataKey="bandwidth" name="Error" stroke="hsl(0, 84%, 60%)" fill="hsl(0, 84%, 60%, 0.12)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
 
-        {/* Cost Breakdown */}
         <Card>
           <CardHeader>
-            <CardTitle>Cost Breakdown</CardTitle>
-            <CardDescription>Monthly spending by category</CardDescription>
+            <CardTitle>Invoice Status Mix</CardTitle>
+            <CardDescription>Distribution of invoice amounts by status</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[280px] flex items-center">
               <ResponsiveContainer width="50%" height="100%">
                 <PieChart>
-                  <Pie
-                    data={costBreakdown}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
+                  <Pie data={costBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
                     {costBreakdown.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
@@ -199,7 +268,7 @@ export const AdminCloudResources = () => {
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                       <span className="text-sm">{item.name}</span>
                     </div>
-                    <span className="font-medium">${(487 * item.value / 100).toFixed(0)}</span>
+                    <span className="font-medium">₹{item.amount.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -208,65 +277,51 @@ export const AdminCloudResources = () => {
         </Card>
       </div>
 
-      {/* Resources List */}
       <Card>
         <CardHeader>
-          <CardTitle>Active Resources</CardTitle>
-          <CardDescription>All running cloud services and their status</CardDescription>
+          <CardTitle>Active Service Checks</CardTitle>
+          <CardDescription>Live checks from internal system health endpoint</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {resources.map((resource) => (
-              <div key={resource.id} className="p-4 bg-muted/50 rounded-xl">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      {resource.type.includes('PostgreSQL') && <Database className="w-5 h-5 text-primary" />}
-                      {resource.type.includes('Redis') && <Zap className="w-5 h-5 text-cyan-500" />}
-                      {resource.type.includes('Deno') && <Cpu className="w-5 h-5 text-purple-500" />}
-                      {resource.type.includes('S3') && <HardDrive className="w-5 h-5 text-green-500" />}
-                      {resource.type.includes('WebSocket') && <Globe className="w-5 h-5 text-orange-500" />}
+            {resources.length === 0 ? (
+              <div className="p-4 bg-muted/50 rounded-xl text-sm text-muted-foreground">No health check resources available.</div>
+            ) : (
+              resources.map((resource) => (
+                <div key={resource.id} className="p-4 bg-muted/50 rounded-xl">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        {resource.name.toLowerCase().includes("database") ? <Database className="w-5 h-5 text-primary" /> : null}
+                        {resource.name.toLowerCase().includes("cache") ? <Zap className="w-5 h-5 text-cyan-500" /> : null}
+                        {resource.name.toLowerCase().includes("api") ? <Cpu className="w-5 h-5 text-purple-500" /> : null}
+                        {!resource.name.toLowerCase().includes("database") && !resource.name.toLowerCase().includes("cache") && !resource.name.toLowerCase().includes("api") ? <Server className="w-5 h-5 text-orange-500" /> : null}
+                      </div>
+                      <div>
+                        <p className="font-medium">{resource.name}</p>
+                        <p className="text-sm text-muted-foreground">{resource.type} • {resource.region}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{resource.name}</p>
-                      <p className="text-sm text-muted-foreground">{resource.type} • {resource.region}</p>
-                    </div>
+                    <Badge className={resource.status === "healthy" ? "bg-green-500/10 text-green-500" : "bg-yellow-500/10 text-yellow-500"}>
+                      {resource.status === "healthy" ? <CheckCircle2 className="w-3 h-3 mr-1" /> : <AlertTriangle className="w-3 h-3 mr-1" />}
+                      {resource.status}
+                    </Badge>
                   </div>
-                  <Badge className="bg-green-500/10 text-green-500">
-                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                    {resource.status}
-                  </Badge>
-                </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  {resource.cpu > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-muted-foreground">CPU</span>
-                        <span className="text-xs font-medium">{resource.cpu}%</span>
-                      </div>
-                      <Progress value={resource.cpu} className="h-1.5" />
-                    </div>
-                  )}
-                  {resource.memory > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-muted-foreground">Memory</span>
-                        <span className="text-xs font-medium">{resource.memory}%</span>
-                      </div>
-                      <Progress value={resource.memory} className="h-1.5" />
-                    </div>
-                  )}
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-muted-foreground">Storage</span>
-                      <span className="text-xs font-medium">{resource.storage}%</span>
+                      <span className="text-xs text-muted-foreground">Latency Load</span>
+                      <span className="text-xs font-medium">{resource.load}%</span>
                     </div>
-                    <Progress value={resource.storage} className="h-1.5" />
+                    <Progress value={resource.load} className="h-1.5" />
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
+          </div>
+
+          <div className="mt-4 text-xs text-muted-foreground">
+            Warning/Error logs in current window: {warningOrError}
           </div>
         </CardContent>
       </Card>

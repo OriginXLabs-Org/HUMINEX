@@ -22,6 +22,8 @@ import { useDashboardLayout, WidgetConfig } from "@/hooks/useDashboardLayout";
 import { 
   useAdminStats, 
   useInternalAuditLogs,
+  useInternalSystemHealth,
+  useInternalSystemLogs,
   usePendingOnboardings, 
   useRecentTenants,
   useAdminRealtime 
@@ -115,7 +117,9 @@ export const AdminOverview = () => {
 
   // Use optimized hooks with React Query
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useAdminStats();
-  const { data: internalAuditLogs, isLoading: auditLogsLoading } = useInternalAuditLogs(8);
+  const { data: internalAuditLogs, isLoading: auditLogsLoading } = useInternalAuditLogs(200);
+  const { data: internalSystemHealth, isLoading: systemHealthLoading } = useInternalSystemHealth();
+  const { data: internalSystemLogs, isLoading: systemLogsLoading } = useInternalSystemLogs("all", 200);
   const { data: pendingOnboardings, isLoading: onboardingsLoading } = usePendingOnboardings(5);
   const { data: recentTenants, isLoading: tenantsLoading } = useRecentTenants(5);
 
@@ -139,7 +143,7 @@ export const AdminOverview = () => {
     [reorderWidgets, setIsDragging]
   );
 
-  const loading = statsLoading || auditLogsLoading || onboardingsLoading || tenantsLoading;
+  const loading = statsLoading || auditLogsLoading || onboardingsLoading || tenantsLoading || systemHealthLoading || systemLogsLoading;
 
   const statCards = useMemo(() => [
     { title: "Total Quotes", value: stats?.totalQuotes || 0, icon: FileText, color: "text-primary", bg: "bg-primary/10" },
@@ -150,12 +154,65 @@ export const AdminOverview = () => {
     { title: "Employer Admins", value: stats?.totalUsers || 0, icon: ShieldCheck, color: "text-green-600", bg: "bg-green-500/10" },
   ], [stats]);
 
-  const systemHealthItems = [
-    { name: "Database", status: "healthy", latency: "12ms" },
-    { name: "API Gateway", status: "healthy", latency: "45ms" },
-    { name: "Edge Functions", status: "healthy", latency: "89ms" },
-    { name: "Storage", status: "healthy", latency: "23ms" },
-  ];
+  const systemHealthItems = (internalSystemHealth?.checks || []).map((item) => ({
+    name: item.name,
+    status: item.status,
+    latency: item.latency,
+  }));
+
+  const displayedAuditLogs = (internalAuditLogs || []).slice(0, 8);
+
+  const userActivity = useMemo(() => {
+    const now = Date.now();
+    const thirtyMinutesAgo = now - 30 * 60 * 1000;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const recentActors = new Set(
+      (internalAuditLogs || [])
+        .filter((log: InternalAuditLog) => new Date(log.occurredAt).getTime() >= thirtyMinutesAgo)
+        .map((log: InternalAuditLog) => log.actorEmail)
+    );
+
+    const todaysEvents = (internalAuditLogs || []).filter(
+      (log: InternalAuditLog) => new Date(log.occurredAt).getTime() >= todayStart.getTime()
+    );
+
+    const loginEvents = todaysEvents.filter((log: InternalAuditLog) =>
+      log.action.toLowerCase().includes("login") || log.action.toLowerCase().includes("auth")
+    );
+
+    const sortedTimes = todaysEvents
+      .map((log: InternalAuditLog) => new Date(log.occurredAt).getTime())
+      .sort((a, b) => b - a);
+    const gaps: number[] = [];
+    for (let index = 1; index < sortedTimes.length; index++) {
+      gaps.push(Math.max(1, Math.round((sortedTimes[index - 1] - sortedTimes[index]) / 60000)));
+    }
+
+    const avgGap = gaps.length > 0
+      ? Math.round(gaps.reduce((sum, value) => sum + value, 0) / gaps.length)
+      : 0;
+
+    return {
+      activeSessions: recentActors.size,
+      todaysEvents: todaysEvents.length,
+      todaysLogins: loginEvents.length,
+      avgIntervalMinutes: avgGap,
+    };
+  }, [internalAuditLogs]);
+
+  const alertsSummary = useMemo(() => {
+    const warningOrError = (internalSystemLogs || []).filter(
+      (log: { level: string }) => log.level === "warning" || log.level === "error"
+    );
+    const errorCount = warningOrError.filter((log: { level: string }) => log.level === "error").length;
+
+    return {
+      warningOrErrorCount: warningOrError.length,
+      errorCount,
+    };
+  }, [internalSystemLogs]);
 
   const statusColors: Record<string, string> = {
     new: "bg-blue-500/10 text-blue-600 border-blue-500/20",
@@ -318,7 +375,7 @@ export const AdminOverview = () => {
                   System Health
                 </CardTitle>
                 <Badge variant="outline" className="text-green-600 border-green-500/30 bg-green-500/10">
-                  All Systems Operational
+                  {(internalSystemHealth?.status || "unknown").toUpperCase()}
                 </Badge>
               </CardHeader>
               <CardContent>
@@ -332,8 +389,8 @@ export const AdminOverview = () => {
                           <p className="text-xs text-muted-foreground">{item.latency}</p>
                         </div>
                       </div>
-                      <Badge variant="outline" className="text-xs text-green-600 border-green-500/30">
-                        Healthy
+                      <Badge variant="outline" className="text-xs text-green-600 border-green-500/30 capitalize">
+                        {item.status}
                       </Badge>
                     </div>
                   ))}
@@ -446,7 +503,7 @@ export const AdminOverview = () => {
                   <p className="text-muted-foreground text-center py-8">No audit events yet</p>
                 ) : (
                   <div className="space-y-3">
-                    {(internalAuditLogs || []).map((event: InternalAuditLog) => (
+                    {displayedAuditLogs.map((event: InternalAuditLog) => (
                       <div key={event.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
                         <div>
                           <p className="font-medium text-foreground">{event.action}</p>
@@ -537,16 +594,20 @@ export const AdminOverview = () => {
                   <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                     <span className="text-sm text-muted-foreground">Active Sessions</span>
                     <Badge variant="secondary" className="bg-green-500/10 text-green-600">
-                      {Math.floor(Math.random() * 50) + 10} online
+                      {userActivity.activeSessions} active
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <span className="text-sm text-muted-foreground">Today's Logins</span>
-                    <span className="font-medium">{Math.floor(Math.random() * 200) + 50}</span>
+                    <span className="text-sm text-muted-foreground">Today's Events</span>
+                    <span className="font-medium">{userActivity.todaysEvents}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <span className="text-sm text-muted-foreground">Avg. Session Duration</span>
-                    <span className="font-medium">{Math.floor(Math.random() * 30) + 5}m</span>
+                    <span className="text-sm text-muted-foreground">Today's Login/Auth Events</span>
+                    <span className="font-medium">{userActivity.todaysLogins}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <span className="text-sm text-muted-foreground">Avg. Event Interval</span>
+                    <span className="font-medium">{userActivity.avgIntervalMinutes}m</span>
                   </div>
                 </div>
               </CardContent>
@@ -561,18 +622,28 @@ export const AdminOverview = () => {
                   System Alerts
                 </CardTitle>
                 <Badge variant="outline" className="text-green-600 border-green-500/30">
-                  All Clear
+                  {alertsSummary.warningOrErrorCount === 0 ? "All Clear" : `${alertsSummary.warningOrErrorCount} Active`}
                 </Badge>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">No critical alerts</p>
-                      <p className="text-xs text-muted-foreground">All systems operating normally</p>
+                  {alertsSummary.warningOrErrorCount === 0 ? (
+                    <div className="flex items-center gap-3 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">No critical alerts</p>
+                        <p className="text-xs text-muted-foreground">All systems operating normally</p>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
+                      <AlertCircle className="h-5 w-5 text-yellow-600" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{alertsSummary.warningOrErrorCount} warning/error logs</p>
+                        <p className="text-xs text-muted-foreground">{alertsSummary.errorCount} errors require review</p>
+                      </div>
+                    </div>
+                  )}
                   <Link to="/admin/threats">
                     <Button variant="ghost" size="sm" className="w-full gap-1">
                       View Alert History <ArrowRight className="h-4 w-4" />
