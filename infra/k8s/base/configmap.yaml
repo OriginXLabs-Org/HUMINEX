@@ -5,8 +5,6 @@ metadata:
   namespace: huminex
 data:
   ASPNETCORE_URLS: "http://+:8080"
-  # Send traces+metrics to in-cluster OTel Collector (Tempo/Prometheus). Azure Monitor/App Insights remains primary.
-  HUMINEX_OpenTelemetry__OtlpEndpoint: "http://otel-collector.huminex-observability.svc.cluster.local:4317"
   HUMINEX_Postgres__ApplyMigrationsOnStartup: "false"
   HUMINEX_DevSecurity__EnableHeaderIdentityFallback: "false"
   HUMINEX_FeatureManagement__OpenHumanInterviewStudio: "false"

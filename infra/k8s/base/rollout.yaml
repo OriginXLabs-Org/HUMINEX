@@ -39,6 +39,9 @@ spec:
             - secretRef:
                 name: huminex-api-secrets
           env:
+            # Wire OTLP export to in-cluster collector (Tempo/Prometheus). Azure Monitor ingestion remains primary.
+            - name: HUMINEX_OpenTelemetry__OtlpEndpoint
+              value: "http://otel-collector.huminex-observability.svc.cluster.local:4317"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
