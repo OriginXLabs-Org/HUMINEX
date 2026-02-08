@@ -1,0 +1,138 @@
+name: HUMINEX Project Overview to Slack
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 */6 * * *"
+
+jobs:
+  send-project-overview:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Validate Slack webhook configuration
+        run: |
+          if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "Missing required secret: SLACK_WEBHOOK_URL"
+            exit 1
+          fi
+
+      - name: Build and send project overview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_CHANNEL_MENTION: ${{ secrets.SLACK_CHANNEL_MENTION }}
+        run: |
+          set -euo pipefail
+
+          now_utc="$(date -u +"%Y-%m-%d %H:%M UTC")"
+          repo_url="https://github.com/${REPO}"
+          actions_url="${repo_url}/actions"
+          frontend_url="${repo_url}/tree/main/Frontend"
+          backend_url="${repo_url}/tree/main/Backend"
+          openhuman_url="${repo_url}/tree/main/openhuman"
+          azure_url="${repo_url}/tree/main/infra"
+
+          latest_conclusion() {
+            local workflow_file="$1"
+            curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPO}/actions/workflows/${workflow_file}/runs?per_page=1" \
+              | jq -r '.workflow_runs[0].conclusion // "unknown"'
+          }
+
+          indicator() {
+            case "$1" in
+              success) echo "🟢" ;;
+              failure) echo "🔴" ;;
+              cancelled) echo "⚫" ;;
+              skipped) echo "⚪" ;;
+              *) echo "🟡" ;;
+            esac
+          }
+
+          frontend_conclusion="$(latest_conclusion frontend-ci.yml)"
+          backend_conclusion="$(latest_conclusion backend-ci.yml)"
+          e2e_conclusion="$(latest_conclusion e2e-playwright.yml)"
+          infra_conclusion="$(latest_conclusion infra-deploy.yml)"
+
+          frontend_mark="$(indicator "$frontend_conclusion")"
+          backend_mark="$(indicator "$backend_conclusion")"
+          e2e_mark="$(indicator "$e2e_conclusion")"
+          infra_mark="$(indicator "$infra_conclusion")"
+
+          # OpenHuman currently has repository skeleton and UI references, no dedicated CI workflow yet.
+          openhuman_mark="🟡"
+          openhuman_state="in_progress"
+
+          blocks='[]'
+
+          if [ -n "${SLACK_CHANNEL_MENTION:-}" ]; then
+            blocks=$(echo "$blocks" | jq --arg mention "$SLACK_CHANNEL_MENTION" '. + [{"type":"section","text":{"type":"mrkdwn","text":$mention}}]')
+          fi
+
+          blocks=$(echo "$blocks" | jq \
+            --arg now "$now_utc" \
+            --arg repo "$repo_url" \
+            --arg actions "$actions_url" '
+            . + [
+              {"type":"header","text":{"type":"plain_text","text":"HUMINEX Project Overview"}},
+              {"type":"context","elements":[
+                {"type":"mrkdwn","text":("*Updated:* " + $now)},
+                {"type":"mrkdwn","text":("<" + $repo + "|Repository>")},
+                {"type":"mrkdwn","text":("<" + $actions + "|GitHub Actions>")}
+              ]},
+              {"type":"divider"}
+            ]
+          ')
+
+          # Project Tracker (Tab 1)
+          blocks=$(echo "$blocks" | jq \
+            --arg fm "$frontend_mark" --arg fs "$frontend_conclusion" \
+            --arg bm "$backend_mark" --arg bs "$backend_conclusion" \
+            --arg em "$e2e_mark" --arg es "$e2e_conclusion" \
+            --arg im "$infra_mark" --arg is "$infra_conclusion" \
+            --arg om "$openhuman_mark" --arg os "$openhuman_state" '
+            . + [
+              {"type":"section","text":{"type":"mrkdwn","text":"*Tab 1: Project Tracker*\n" +
+                $fm + " Frontend: *" + $fs + "*\n" +
+                $bm + " Backend: *" + $bs + "*\n" +
+                $em + " E2E Automation: *" + $es + "*\n" +
+                $im + " Azure/Infra: *" + $is + "*\n" +
+                $om + " OpenHuman: *" + $os + "*"}},
+              {"type":"section","text":{"type":"mrkdwn","text":"*Completed:* Internal Admin auth guardrails, audit logging, summary/users/tenants/quotes/invoices/billing/revenue/system endpoints, Swagger HUMINEX Admin grouping, CI + Slack pipeline cards.\n*Pending:* Replace remaining UI mock modules with backend APIs, OpenHuman full backend integration + dedicated pipeline, deeper Azure runtime telemetry consolidation."}},
+              {"type":"divider"}
+            ]
+          ')
+
+          # Project Tech Stack (Tab 2)
+          blocks=$(echo "$blocks" | jq '
+            . + [
+              {"type":"section","text":{"type":"mrkdwn","text":"*Tab 2: Project Tech Stacks*\n• Frontend: React + TypeScript + Vite + Tailwind + MSAL (Microsoft Entra)\n• Backend: .NET 8 Web API + EF Core + PostgreSQL + Redis + OpenTelemetry\n• Automation: Playwright + TypeScript API/UI smoke tests\n• Cloud/Infra: Azure (Bicep), ACR, Kubernetes manifests, GitHub Actions CI/CD\n• Observability: Health checks, audit trails, Slack status workflows"}},
+              {"type":"actions","elements":[
+                {"type":"button","text":{"type":"plain_text","text":"Navigate Frontend"},"url":"REPLACE_FRONTEND"},
+                {"type":"button","text":{"type":"plain_text","text":"Navigate Backend"},"url":"REPLACE_BACKEND"},
+                {"type":"button","text":{"type":"plain_text","text":"Navigate Azure/Infra"},"url":"REPLACE_AZURE"}
+              ]},
+              {"type":"divider"}
+            ]
+          ' | sed "s|REPLACE_FRONTEND|${frontend_url}|g" | sed "s|REPLACE_BACKEND|${backend_url}|g" | sed "s|REPLACE_AZURE|${azure_url}|g")
+
+          # About HUMINEX (Tab 3)
+          blocks=$(echo "$blocks" | jq '
+            . + [
+              {"type":"section","text":{"type":"mrkdwn","text":"*Tab 3: About HUMINEX*\nEnterprise workforce platform for payroll, HR, workforce operations, billing, and OpenHuman interview intelligence.\nFocused on role-based access, multi-tenant operations, compliance, and automation from onboarding to ongoing operations."}},
+              {"type":"actions","elements":[
+                {"type":"button","text":{"type":"plain_text","text":"Navigate OpenHuman"},"url":"REPLACE_OPENHUMAN"},
+                {"type":"button","text":{"type":"plain_text","text":"Navigate Actions"},"url":"REPLACE_ACTIONS"}
+              ]}
+            ]
+          ' | sed "s|REPLACE_OPENHUMAN|${openhuman_url}|g" | sed "s|REPLACE_ACTIONS|${actions_url}|g")
+
+          payload=$(jq -n --arg text "HUMINEX Project Overview" --argjson blocks "$blocks" '{text:$text, blocks:$blocks}')
+          curl -fsSL -X POST -H "Content-Type: application/json" --data "$payload" "$SLACK_WEBHOOK_URL" >/dev/null
+          echo "HUMINEX project overview sent to Slack."
