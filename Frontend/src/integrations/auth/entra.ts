@@ -80,6 +80,7 @@ export const msalConfig = {
     authority: `https://login.microsoftonline.com/${tenantId ?? "common"}`,
     redirectUri: defaultRedirectUri,
     postLogoutRedirectUri: window.location.origin,
+    navigateToLoginRequestUrl: false,
   },
   cache: {
     cacheLocation: BrowserCacheLocation.LocalStorage,
@@ -181,6 +182,11 @@ async function waitForInteractionToSettle(timeoutMs = 4000): Promise<boolean> {
 }
 
 function resolveRedirectUri(portal: EntraPortal): string {
+  if (isHostedOnHuminexDomain) {
+    if (portal === "admin") return new URL("/admin/login", window.location.origin).toString();
+    if (portal === "tenant") return new URL("/tenant/login", window.location.origin).toString();
+  }
+
   if (portal === "admin") return adminRedirectUri;
   if (portal === "tenant") return tenantRedirectUri;
   return defaultRedirectUri;

@@ -12,10 +12,15 @@ const ADMIN_ROLES = new Set(["admin", "super_admin", "director"]);
 const INTERNAL_ADMIN_EMAIL = "originxlabs@gmail.com";
 const STRONG_AUTH_METHODS = new Set(["mfa", "fido", "rsa", "otp", "wia", "hwk", "x509"]);
 const ADMIN_AUDIT_STORAGE_KEY = "huminex_admin_auth_audit";
+const HOSTED_DOMAIN_PATTERN = /(^|\.)gethuminex\.com$/i;
 const ADMIN_REDIRECT_URI =
-  (import.meta.env.VITE_AZURE_AD_ADMIN_REDIRECT_URI as string | undefined)
-  ?? (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined)
-  ?? window.location.origin;
+  HOSTED_DOMAIN_PATTERN.test(window.location.hostname)
+    ? new URL("/admin/login", window.location.origin).toString()
+    : (
+      (import.meta.env.VITE_AZURE_AD_ADMIN_REDIRECT_URI as string | undefined)
+      ?? (import.meta.env.VITE_AZURE_AD_REDIRECT_URI as string | undefined)
+      ?? window.location.origin
+    );
 const LOCAL_BYPASS_ENABLED =
   import.meta.env.DEV === true &&
   ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
