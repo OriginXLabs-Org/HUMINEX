@@ -19,9 +19,10 @@ fi
 LAW_NAME="${NAME_PREFIX}-${ENVIRONMENT}-law"
 LAW_ID="$(az resource show -g "${RESOURCE_GROUP}" -n "${LAW_NAME}" --resource-type Microsoft.OperationalInsights/workspaces --query id -o tsv)"
 
-WORKBOOKS_JSON="$(az monitor app-insights workbook list -g "${RESOURCE_GROUP}" --category workbook -o json)"
-WORKBOOK_NAME="$(echo "${WORKBOOKS_JSON}" | jq -r --arg n "${WORKBOOK_DISPLAY_NAME}" '.[]? | select(.displayName == $n) | .name' | head -n1)"
-WORKBOOK_ID="$(echo "${WORKBOOKS_JSON}" | jq -r --arg n "${WORKBOOK_DISPLAY_NAME}" '.[]? | select(.displayName == $n) | .id' | head -n1)"
+SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+WORKBOOKS_JSON="$(az rest --method get --uri "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Insights/workbooks?api-version=2021-03-08" -o json)"
+WORKBOOK_NAME="$(echo "${WORKBOOKS_JSON}" | jq -r --arg n "${WORKBOOK_DISPLAY_NAME}" '.value[]? | select(.properties.displayName == $n) | .name' | head -n1)"
+WORKBOOK_ID="$(echo "${WORKBOOKS_JSON}" | jq -r --arg n "${WORKBOOK_DISPLAY_NAME}" '.value[]? | select(.properties.displayName == $n) | .id' | head -n1)"
 
 if [[ -z "${WORKBOOK_ID}" || -z "${WORKBOOK_NAME}" ]]; then
   echo "FAIL: Workbook '${WORKBOOK_DISPLAY_NAME}' not found in ${RESOURCE_GROUP}."

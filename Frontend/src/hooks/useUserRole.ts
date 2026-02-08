@@ -43,8 +43,11 @@ export const useUserRole = () => {
         const role = (me.role || "").toLowerCase();
         setIsAdmin(role === "admin" || role === "super_admin" || role === "director");
       } catch (err) {
-        console.error("Error checking admin role:", err);
-        setIsAdmin(false);
+        // Fallback to token/session role when profile endpoint is temporarily unavailable.
+        const roleFromSession = String((user.user_metadata as Record<string, unknown> | undefined)?.role ?? "").toLowerCase();
+        const roleFromStorage = String(localStorage.getItem("huminex_tenant_role") ?? "").toLowerCase();
+        const fallbackRole = roleFromSession || roleFromStorage;
+        setIsAdmin(fallbackRole === "admin" || fallbackRole === "super_admin" || fallbackRole === "director");
       } finally {
         setLoading(false);
       }

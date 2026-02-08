@@ -43,39 +43,51 @@ else
 fi
 WORKBOOK_NAME="${WORKBOOK_ID##*/}"
 RESOLVED_JSON="/tmp/huminex_workbook_${ENVIRONMENT}_resolved.json"
+WORKBOOK_PAYLOAD="/tmp/huminex_workbook_${ENVIRONMENT}_payload.json"
 
 sed "s|__LAW_RESOURCE_ID__|${LAW_ID}|g" "${DEFINITION_FILE}" > "${RESOLVED_JSON}"
 SERIALIZED_DATA_COMPACT="$(jq -c . "${RESOLVED_JSON}")"
 
-if [[ -n "${EXISTING_WORKBOOK_ID}" ]]; then
-  UPSERT_RESPONSE="$(az monitor app-insights workbook update \
-    --resource-group "${RESOURCE_GROUP}" \
-    --resource-name "${WORKBOOK_NAME}" \
-    --kind shared \
-    --category workbook \
-    --version 'Notebook/1.0' \
-    --display-name "${WORKBOOK_DISPLAY_NAME}" \
-    --source-id "/subscriptions/${SUBSCRIPTION_ID}" \
-    --serialized-data "${SERIALIZED_DATA_COMPACT}" \
-    --tags "app=huminex" "environment=${ENVIRONMENT}" "owner=${OWNER}" "team=${TEAM}" "cost-center=${COST_CENTER}" \
-    -o json)"
-else
-  UPSERT_RESPONSE="$(az monitor app-insights workbook create \
-    --resource-group "${RESOURCE_GROUP}" \
-    --name "${WORKBOOK_NAME}" \
-    --location "${LOCATION}" \
-    --kind shared \
-    --category workbook \
-    --version 'Notebook/1.0' \
-    --display-name "${WORKBOOK_DISPLAY_NAME}" \
-    --source-id "/subscriptions/${SUBSCRIPTION_ID}" \
-    --serialized-data "${SERIALIZED_DATA_COMPACT}" \
-    --tags "app=huminex" "environment=${ENVIRONMENT}" "owner=${OWNER}" "team=${TEAM}" "cost-center=${COST_CENTER}" \
-    -o json)"
-fi
+jq -n \
+  --arg location "${LOCATION}" \
+  --arg env "${ENVIRONMENT}" \
+  --arg owner "${OWNER}" \
+  --arg team "${TEAM}" \
+  --arg costCenter "${COST_CENTER}" \
+  --arg displayName "${WORKBOOK_DISPLAY_NAME}" \
+  --arg serializedData "${SERIALIZED_DATA_COMPACT}" \
+  --arg sourceId "/subscriptions/${SUBSCRIPTION_ID}" \
+  '{
+    kind: "shared",
+    location: $location,
+    tags: {
+      app: "huminex",
+      environment: $env,
+      owner: $owner,
+      team: $team,
+      "cost-center": $costCenter,
+      "hidden-title": $displayName
+    },
+    properties: {
+      displayName: $displayName,
+      serializedData: $serializedData,
+      version: "Notebook/1.0",
+      category: "workbook",
+      sourceId: $sourceId
+    }
+  }' > "${WORKBOOK_PAYLOAD}"
 
-echo "${UPSERT_RESPONSE}" | jq '{displayName,serializedDataLen:(.serializedData // "" | length)}'
+UPSERT_RESPONSE="$(az rest \
+  --method put \
+  --uri "https://management.azure.com${WORKBOOK_ID}?api-version=2021-03-08" \
+  --headers "Content-Type=application/json" \
+  --body @"${WORKBOOK_PAYLOAD}" \
+  -o json)"
 
+echo "${UPSERT_RESPONSE}" | jq '{displayName:.properties.displayName,serializedDataLen:(.properties.serializedData // "" | length)}'
+
+# Workbook ARM GET may return null serializedData even when content is persisted.
+# Use workbook show with can-fetch-content for deterministic verification.
 WB_GET_RESPONSE="$(az monitor app-insights workbook show --resource-group "${RESOURCE_GROUP}" --resource-name "${WORKBOOK_NAME}" --can-fetch-content true -o json)"
 SERIALIZED_LEN="$(echo "${WB_GET_RESPONSE}" | jq -r '(.serializedData // "" | length)')"
 SERIALIZED_TEXT="$(echo "${WB_GET_RESPONSE}" | jq -r '.serializedData // ""')"
