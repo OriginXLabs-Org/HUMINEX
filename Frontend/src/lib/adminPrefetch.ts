@@ -6,6 +6,7 @@ type LazyImportFn = () => Promise<any>;
 const moduleImports: Record<string, LazyImportFn> = {
   "/admin": () => import("@/components/admin/AdminOverview"),
   "/admin/analytics": () => import("@/components/admin/modules/AdminAnalyticsDashboard"),
+  "/admin/architecture": () => import("@/components/admin/modules/AdminArchitecture"),
   "/admin/analytics/basic": () => import("@/components/admin/modules/AdminAnalytics"),
   "/admin/health": () => import("@/components/admin/modules/AdminSystemHealth"),
   "/admin/tenants": () => import("@/components/admin/modules/AdminTenantManagement"),

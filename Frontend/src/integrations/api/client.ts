@@ -173,6 +173,30 @@ export type InternalApiCatalogResponse = {
   endpoints: InternalApiEndpointResponse[];
 };
 
+export type InternalPortalModuleStatusResponse = {
+  module: string;
+  status: "completed" | "pending" | string;
+  implementedWith: string;
+  pendingReason: string;
+  primaryEndpoint: string;
+};
+
+export type InternalPortalArchitectureStatusResponse = {
+  name: string;
+  completedModules: number;
+  pendingModules: number;
+  endpointCount: number;
+  modules: InternalPortalModuleStatusResponse[];
+};
+
+export type InternalArchitectureStatusResponse = {
+  generatedAtUtc: string;
+  title: string;
+  notes: string;
+  techStack: string[];
+  portals: InternalPortalArchitectureStatusResponse[];
+};
+
 export type InternalAdminQuoteResponse = {
   id: string;
   tenantId: string;
@@ -535,6 +559,8 @@ export const huminexApi = {
     apiRequest<InternalSystemHealthResponse>("/admin/internal/system-health", {}, accessToken),
   getInternalApiEndpoints: (accessToken?: string) =>
     apiRequest<InternalApiCatalogResponse>("/admin/internal/api-endpoints", {}, accessToken),
+  getInternalArchitectureStatus: (accessToken?: string) =>
+    apiRequest<InternalArchitectureStatusResponse>("/admin/internal/architecture-status", {}, accessToken),
   getInternalQuotes: (limit = 200, status = "all", search?: string, accessToken?: string) =>
     apiRequest<InternalAdminQuoteResponse[]>(
       `/admin/internal/quotes?limit=${limit}&status=${encodeURIComponent(status)}${search ? `&search=${encodeURIComponent(search)}` : ""}`,

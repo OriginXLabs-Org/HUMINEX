@@ -95,6 +95,7 @@ const navSections: NavSection[] = [
       { name: "Dashboard Overview", href: "/admin", icon: LayoutDashboard },
       { name: "Real-time Analytics", href: "/admin/analytics", icon: BarChart3, badge: "Live" },
       { name: "System Health", href: "/admin/health", icon: Gauge },
+      { name: "HUMINEX Architecture", href: "/admin/architecture", icon: Workflow, badge: "Tracker" },
     ]
   },
   {

@@ -1439,6 +1439,80 @@ public sealed class InternalAdminController(
         return Ok(new ApiEnvelope<InternalApiCatalogResponse>(response, HttpContext.TraceIdentifier));
     }
 
+    [HttpGet("architecture-status")]
+    [ProducesResponseType(typeof(ApiEnvelope<InternalArchitectureStatusResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public ActionResult<ApiEnvelope<InternalArchitectureStatusResponse>> GetArchitectureStatus()
+    {
+        if (!IsInternalAdmin())
+        {
+            return Forbid();
+        }
+
+        var endpoints = apiDescriptionGroupCollectionProvider.ApiDescriptionGroups.Items
+            .SelectMany(group => group.Items)
+            .Select(item => NormalizeApiRoute(item.RelativePath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        bool HasRoutePrefix(params string[] prefixes) => endpoints.Any(route => prefixes.Any(prefix => route.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+        int CountByPrefix(params string[] prefixes) => endpoints.Count(route => prefixes.Any(prefix => route.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+
+        var employeeModules = new[]
+        {
+            BuildModule("Employee Authentication & Profile", HasRoutePrefix("/api/v{version}/users"), ".NET 8 Web API, Microsoft Entra, PostgreSQL", "/api/v{version}/users/me"),
+            BuildModule("Employee Organization Data", HasRoutePrefix("/api/v{version}/org"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/org"),
+            BuildModule("Employee Workforce Operations", HasRoutePrefix("/api/v{version}/workforce"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/workforce"),
+            BuildModule("Employee Payroll Access", HasRoutePrefix("/api/v{version}/payroll"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/payroll"),
+            BuildModule("Employee OpenHuman Features", HasRoutePrefix("/api/v{version}/openhuman"), ".NET 8 Web API, OpenAI/AI integrations", "/api/v{version}/openhuman")
+        };
+
+        var employerModules = new[]
+        {
+            BuildModule("Employer Quote Management", HasRoutePrefix("/api/v{version}/admin/internal/quotes"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/admin/internal/quotes"),
+            BuildModule("Employer Invoice Management", HasRoutePrefix("/api/v{version}/admin/internal/invoices"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/admin/internal/invoices"),
+            BuildModule("Employer Billing Insights", HasRoutePrefix("/api/v{version}/admin/internal/tenant-billing"), ".NET 8 Web API, analytics endpoints", "/api/v{version}/admin/internal/tenant-billing"),
+            BuildModule("Employer Onboarding Operations", HasRoutePrefix("/api/v{version}/admin/internal/employers"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/admin/internal/employers"),
+            BuildModule("Employer Activity & Audit", HasRoutePrefix("/api/v{version}/admin/internal/employers", "/api/v{version}/admin/internal/audit-logs"), ".NET 8 Web API, audit trail persistence", "/api/v{version}/admin/internal/audit-logs")
+        };
+
+        var internalModules = new[]
+        {
+            BuildModule("Internal Command Center", HasRoutePrefix("/api/v{version}/admin/internal/summary"), ".NET 8 Web API, internal admin authorization", "/api/v{version}/admin/internal/summary"),
+            BuildModule("Internal API Endpoint Dashboard", HasRoutePrefix("/api/v{version}/admin/internal/api-endpoints"), ".NET 8 Web API, API Explorer metadata", "/api/v{version}/admin/internal/api-endpoints"),
+            BuildModule("Internal System Health & AKS Pod Monitoring", HasRoutePrefix("/api/v{version}/admin/internal/system-health"), ".NET 8 Web API, HealthChecks, Kubernetes API", "/api/v{version}/admin/internal/system-health"),
+            BuildModule("Internal AI/Automation Control", HasRoutePrefix("/api/v{version}/admin/internal/ai-dashboard", "/api/v{version}/admin/internal/automation-logs"), ".NET 8 Web API, analytics and automation modules", "/api/v{version}/admin/internal/ai-dashboard"),
+            BuildModule("Internal Platform Security & Audit", HasRoutePrefix("/api/v{version}/admin/internal/system-logs", "/api/v{version}/admin/internal/audit-logs"), ".NET 8 Web API, audit/security telemetry", "/api/v{version}/admin/internal/system-logs"),
+            BuildModule("Internal Architecture Tracking Board", true, "Frontend module with backend architecture status endpoint", "/api/v{version}/admin/internal/architecture-status")
+        };
+
+        var portals = new[]
+        {
+            BuildPortal("EMPLOYEE Portal", employeeModules, CountByPrefix("/api/v{version}/users", "/api/v{version}/org", "/api/v{version}/workforce", "/api/v{version}/payroll", "/api/v{version}/openhuman")),
+            BuildPortal("EMPLOYER Portal", employerModules, CountByPrefix("/api/v{version}/admin/internal/quotes", "/api/v{version}/admin/internal/invoices", "/api/v{version}/admin/internal/employers", "/api/v{version}/admin/internal/tenant-billing")),
+            BuildPortal("HUMINEX INTERNAL", internalModules, CountByPrefix("/api/v{version}/admin/internal"))
+        };
+
+        var response = new InternalArchitectureStatusResponse(
+            DateTime.UtcNow,
+            "HUMINEX Features Summary Board",
+            "Backend status is derived from live API metadata and internal-admin endpoint inventory.",
+            new[]
+            {
+                ".NET 8",
+                "ASP.NET Core Web API",
+                "EF Core + PostgreSQL",
+                "Azure Kubernetes Service (AKS)",
+                "Azure Service Bus",
+                "Azure Blob Storage",
+                "Azure Redis Cache",
+                "Microsoft Entra ID"
+            },
+            portals);
+
+        return Ok(new ApiEnvelope<InternalArchitectureStatusResponse>(response, HttpContext.TraceIdentifier));
+    }
+
     private List<AzureResourceInventoryItem> BuildInventory(AzureResourceInventoryOptions azure)
     {
         return
@@ -1482,6 +1556,36 @@ public sealed class InternalAdminController(
     private static string BuildAksNamespacePortalUrl(AzureResourceInventoryOptions azure)
     {
         return BuildAksPodsPortalUrl(azure);
+    }
+
+    private static InternalPortalModuleStatusResponse BuildModule(
+        string module,
+        bool implemented,
+        string implementedWith,
+        string primaryEndpoint)
+    {
+        return new InternalPortalModuleStatusResponse(
+            module,
+            implemented ? "completed" : "pending",
+            implementedWith,
+            implemented ? string.Empty : "Module APIs are not fully exposed yet.",
+            primaryEndpoint);
+    }
+
+    private static InternalPortalArchitectureStatusResponse BuildPortal(
+        string name,
+        IReadOnlyCollection<InternalPortalModuleStatusResponse> modules,
+        int endpointCount)
+    {
+        var completed = modules.Count(x => string.Equals(x.Status, "completed", StringComparison.OrdinalIgnoreCase));
+        var pending = modules.Count - completed;
+
+        return new InternalPortalArchitectureStatusResponse(
+            name,
+            completed,
+            pending,
+            endpointCount,
+            modules);
     }
 
     private static string NormalizeApiRoute(string? relativePath)
@@ -1893,6 +1997,27 @@ public sealed record InternalApiEndpointResponse(
     bool AuthRequired,
     long CallCount,
     string OperationName);
+
+public sealed record InternalArchitectureStatusResponse(
+    DateTime GeneratedAtUtc,
+    string Title,
+    string Notes,
+    IReadOnlyCollection<string> TechStack,
+    IReadOnlyCollection<InternalPortalArchitectureStatusResponse> Portals);
+
+public sealed record InternalPortalArchitectureStatusResponse(
+    string Name,
+    int CompletedModules,
+    int PendingModules,
+    int EndpointCount,
+    IReadOnlyCollection<InternalPortalModuleStatusResponse> Modules);
+
+public sealed record InternalPortalModuleStatusResponse(
+    string Module,
+    string Status,
+    string ImplementedWith,
+    string PendingReason,
+    string PrimaryEndpoint);
 
 public sealed record InternalAdminQuoteResponse(
     Guid Id,

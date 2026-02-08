@@ -46,6 +46,7 @@ const LazyComponents = {
   tenantBilling: lazy(() => import("@/components/admin/modules/AdminTenantBilling").then(m => ({ default: m.AdminTenantBilling }))),
   revenue: lazy(() => import("@/components/admin/modules/AdminRevenueAnalytics").then(m => ({ default: m.AdminRevenueAnalytics }))),
   systemHealth: lazy(() => import("@/components/admin/modules/AdminSystemHealth").then(m => ({ default: m.AdminSystemHealth }))),
+  architecture: lazy(() => import("@/components/admin/modules/AdminArchitecture").then(m => ({ default: m.AdminArchitecture }))),
   pipeline: lazy(() => import("@/components/admin/modules/AdminPipelineManagement").then(m => ({ default: m.AdminPipelineManagement }))),
   threats: lazy(() => import("@/components/admin/modules/AdminThreatDetection").then(m => ({ default: m.AdminThreatDetection }))),
   cloud: lazy(() => import("@/components/admin/modules/AdminCloudResources").then(m => ({ default: m.AdminCloudResources }))),
@@ -102,6 +103,7 @@ const AdminPage = () => {
     if (path === "/admin/analytics") return <LazyComponents.analyticsDashboard />;
     if (path.startsWith("/admin/analytics/basic")) return <LazyComponents.analytics />;
     if (path.startsWith("/admin/health")) return <LazyComponents.systemHealth />;
+    if (path.startsWith("/admin/architecture")) return <LazyComponents.architecture />;
     
     // Tenant Management
     if (path.startsWith("/admin/tenants")) return <LazyComponents.tenants />;
