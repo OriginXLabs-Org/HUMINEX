@@ -6,23 +6,23 @@ title: OpenHuman HLD
 
 ```mermaid
 flowchart LR
-  C[Candidate] --> WEB[Interview Web (Browser + WebRTC)]
-  INT[Interviewer/Recruiter] --> STUDIO[Studio UI (Question bank + rubric)]
+  C[Candidate] --> WEB[Interview Web: Browser and WebRTC]
+  INT[Interviewer/Recruiter] --> STUDIO[Studio UI: Question bank and rubric]
 
-  WEB --> GW[OpenHuman Gateway API (Auth + session)]
+  WEB --> GW[OpenHuman Gateway API: Auth and session]
   STUDIO --> GW
 
-  GW --> ORCH[Interview Orchestrator (State machine)]
-  ORCH --> BUS[Service Bus (events/commands)]
+  GW --> ORCH[Interview Orchestrator: state machine]
+  ORCH --> BUS[Service Bus: events and commands]
   ORCH --> DB[(PostgreSQL)]
   ORCH --> CACHE[(Redis)]
-  ORCH --> BLOB[(Blob Storage (audio/transcripts))]
+  ORCH --> BLOB[(Blob Storage: audio and transcripts)]
 
-  ORCH --> STT[Speech-to-Text (Azure Speech)]
-  ORCH --> LLM[LLM Runtime (Azure OpenAI)]
-  ORCH --> RAG[RAG / Knowledge (Azure AI Search)]
+  ORCH --> STT[Speech-to-Text: Azure Speech]
+  ORCH --> LLM[LLM Runtime: Azure OpenAI]
+  ORCH --> RAG[RAG Knowledge: Azure AI Search]
 
-  ORCH --> HUM[HUMINEX API (ATS + onboarding)]
+  ORCH --> HUM[HUMINEX API: ATS and onboarding]
 
   ORCH --> OTEL[OpenTelemetry]
   OTEL --> LAW[Log Analytics]
