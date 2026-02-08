@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { platformClient as platform } from "@/integrations/platform/client";
+import { API_BASE_URL } from "@/integrations/api/client";
 
 interface PrivacySettings {
   maskAllInputs: boolean;
@@ -356,7 +357,7 @@ export const useSessionRecording = (options: UseSessionRecordingOptions = {}) =>
         
         // Use sendBeacon for reliable delivery on unload
         navigator.sendBeacon?.(
-          `${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5035/api/v1"}/telemetry/session-recordings`,
+          `${API_BASE_URL}/telemetry/session-recordings`,
           blob
         );
       }

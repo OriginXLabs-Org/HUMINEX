@@ -355,7 +355,36 @@ export type InternalAdminFeatureFlagsResponse = {
   abTests: InternalAdminAbTestResponse[];
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api/v1";
+function resolveApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
+  const fallbackLocal = "http://localhost:5000/api/v1";
+  const fallbackProd = "https://api.gethuminex.com/api/v1";
+
+  if (typeof window === "undefined") {
+    return configured ?? fallbackLocal;
+  }
+
+  const onHostedDomain = /(^|\.)gethuminex\.com$/i.test(window.location.hostname);
+  const raw = (configured ?? fallbackLocal).trim();
+
+  try {
+    const parsed = new URL(raw);
+    const isLocalTarget = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    if (onHostedDomain && isLocalTarget) {
+      console.warn("VITE_API_BASE_URL points to localhost on hosted domain. Falling back to production API URL.");
+      return fallbackProd;
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    // Support relative values and malformed input with safe defaults.
+    if (onHostedDomain) {
+      return fallbackProd;
+    }
+    return fallbackLocal;
+  }
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 const SESSION_STORAGE_KEY = "huminex_api_session";
 
 export class ApiClientError extends Error {
