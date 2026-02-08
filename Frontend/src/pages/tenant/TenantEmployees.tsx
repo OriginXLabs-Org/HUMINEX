@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -8,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { useTenantRole } from "@/hooks/useTenantRole";
 import {
-  HUMINEX_ORG,
   ORG_ROLE_LABELS,
   canViewEmployeeProfile,
   getAllReports,
@@ -17,16 +15,7 @@ import {
   type OrgEmployee,
   type OrgRole,
 } from "@/lib/rbacHierarchy";
-import { Mail, Save, Search, ShieldCheck, Users } from "lucide-react";
-import {
-  TenantAccessConfig,
-  TenantModuleId,
-  TENANT_NON_ADMIN_ROLES,
-  TENANT_ROLE_LABELS,
-  getDefaultTenantAccessConfig,
-  readTenantAccessConfig,
-  saveTenantAccessConfig,
-} from "@/lib/tenantRbac";
+import { Search, Users } from "lucide-react";
 import { huminexApi } from "@/integrations/api/client";
 
 type EmployeeVisibility = {
@@ -35,6 +24,11 @@ type EmployeeVisibility = {
   insurance: boolean;
   benefits: boolean;
   documents: boolean;
+};
+
+type EmployeeAccessState = {
+  isEnabled: boolean;
+  allowedWidgets: string[];
 };
 
 const ROLE_OPTIONS: OrgRole[] = [
@@ -60,8 +54,6 @@ const DEFAULT_EMPLOYEE_VISIBILITY: EmployeeVisibility = {
   documents: true,
 };
 
-const normalize = (value?: string | null) => (value || "").toLowerCase();
-
 const mapApiRoleToOrgRole = (role?: string | null): OrgRole => {
   const normalized = (role || "").toLowerCase();
   if (normalized === "intern") return "intern";
@@ -80,42 +72,51 @@ const mapApiRoleToOrgRole = (role?: string | null): OrgRole => {
   return "employee";
 };
 
-const findActingUser = (tenantRole: ReturnType<typeof useTenantRole>["role"]): OrgEmployee => {
-  const mappedRole = mapTenantRoleToOrgRole(tenantRole);
-  return HUMINEX_ORG.find((e) => e.role === mappedRole) ?? HUMINEX_ORG[0];
+const sanitizeWidgets = (widgets: string[]) =>
+  Array.from(new Set(widgets.map((w) => w.trim().toLowerCase()).filter((w) => w.length > 0)));
+
+const widgetsToVisibility = (widgets: string[]): EmployeeVisibility => {
+  const widgetSet = new Set(widgets.map((w) => w.toLowerCase()));
+  return {
+    finance: widgetSet.has("finance"),
+    payslips: widgetSet.has("payslips"),
+    insurance: widgetSet.has("insurance"),
+    benefits: widgetSet.has("benefits"),
+    documents: widgetSet.has("documents"),
+  };
+};
+
+const visibilityToWidgets = (visibility: EmployeeVisibility): string[] => {
+  const widgets: string[] = [];
+  if (visibility.finance) widgets.push("finance");
+  if (visibility.payslips) widgets.push("payslips");
+  if (visibility.insurance) widgets.push("insurance");
+  if (visibility.benefits) widgets.push("benefits");
+  if (visibility.documents) widgets.push("documents");
+  return sanitizeWidgets(widgets);
 };
 
 const TenantEmployees = () => {
   const { role: tenantRole } = useTenantRole();
-  const actor = useMemo(() => findActingUser(tenantRole), [tenantRole]);
-  const [employees, setEmployees] = useState(HUMINEX_ORG);
+  const [employees, setEmployees] = useState<OrgEmployee[]>([]);
+  const [accessMap, setAccessMap] = useState<Record<string, EmployeeAccessState>>({});
   const [search, setSearch] = useState("");
-  const [tenantAccessConfig, setTenantAccessConfig] = useState<TenantAccessConfig>(() => readTenantAccessConfig());
-  const [activePolicyRole, setActivePolicyRole] = useState<(typeof TENANT_NON_ADMIN_ROLES)[number]>("hr");
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const [portalAccessMap, setPortalAccessMap] = useState<Record<string, boolean>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("huminex_employee_portal_access") || "{}");
-    } catch {
-      return {};
-    }
-  });
-
-  const [visibilityMap, setVisibilityMap] = useState<Record<string, EmployeeVisibility>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("huminex_employee_visibility") || "{}");
-    } catch {
-      return {};
-    }
-  });
+  const actor = useMemo(() => {
+    if (employees.length === 0) return null;
+    const mappedRole = mapTenantRoleToOrgRole(tenantRole);
+    return employees.find((e) => e.role === mappedRole) ?? employees[0];
+  }, [tenantRole, employees]);
 
   const visibleEmployees = useMemo(() => {
+    if (!actor) return [];
     if (["founder", "ceo", "cto", "cfo", "vp", "director"].includes(actor.role)) return employees;
     return [actor, ...getAllReports(actor.id, employees)];
   }, [actor, employees]);
 
   const filteredEmployees = useMemo(() => {
+    if (!actor) return [];
     return visibleEmployees
       .filter((emp) => canViewEmployeeProfile(actor, emp, employees))
       .filter((emp) => {
@@ -129,9 +130,10 @@ const TenantEmployees = () => {
   }, [actor, employees, search, visibleEmployees]);
 
   const managerChainLabel = useMemo(() => {
+    if (!actor) return "N/A";
     const chain = getManagerChain(actor.id, employees);
     return chain.length ? chain.map((m) => m.name).join(" -> ") : "Top-level";
-  }, [actor.id, employees]);
+  }, [actor, employees]);
 
   const canAdminManage = tenantRole === "super_admin" || tenantRole === "admin";
 
@@ -155,15 +157,28 @@ const TenantEmployees = () => {
           email: item.email,
           role: mapApiRoleToOrgRole(item.role),
           department: item.department,
-          managerId: managerMap.get(item.employeeId) ?? null,
+          managerId: item.managerEmployeeId ?? managerMap.get(item.employeeId) ?? null,
         }));
 
-        if (mounted && mappedEmployees.length > 0) {
+        const mappedAccess: Record<string, EmployeeAccessState> = {};
+        page.page.items.forEach((item) => {
+          mappedAccess[item.employeeId] = {
+            isEnabled: item.isPortalAccessEnabled,
+            allowedWidgets: sanitizeWidgets(item.allowedWidgets || []),
+          };
+        });
+
+        if (mounted) {
           setEmployees(mappedEmployees);
+          setAccessMap(mappedAccess);
         }
       } catch (error) {
         console.error("Failed to load employees from API:", error);
-        toast.error("Using local demo employee data. API sync failed.");
+        if (mounted) {
+          setEmployees([]);
+          setAccessMap({});
+        }
+        toast.error("Failed to load employee directory from HUMINEX API.");
       } finally {
         if (mounted) setIsSyncing(false);
       }
@@ -175,110 +190,78 @@ const TenantEmployees = () => {
     };
   }, []);
 
-  const modulePolicyCatalog: { id: TenantModuleId; label: string }[] = [
-    { id: "workforce", label: "Employee Directory" },
-    { id: "employees", label: "Portal Access Admin" },
-    { id: "payroll", label: "Payroll" },
-    { id: "finance", label: "Finance" },
-    { id: "attendance", label: "Attendance" },
-    { id: "documents", label: "Documents" },
-    { id: "recruitment", label: "Recruitment" },
-    { id: "performance", label: "Performance" },
-    { id: "projects", label: "Projects" },
-    { id: "compliance", label: "Compliance" },
-    { id: "intelligence", label: "Proxima AI" },
-    { id: "openhuman-studio", label: "OpenHuman Interview Studio" },
-  ];
+  const getPortalAccess = (employeeId: string) => {
+    return accessMap[employeeId]?.isEnabled ?? true;
+  };
 
-  const setTenantRoleModuleAccess = (role: (typeof TENANT_NON_ADMIN_ROLES)[number], moduleId: TenantModuleId, enabled: boolean) => {
+  const getVisibility = (employeeId: string): EmployeeVisibility => {
+    const allowedWidgets = accessMap[employeeId]?.allowedWidgets ?? [];
+    const visibility = widgetsToVisibility(allowedWidgets);
+
+    if (allowedWidgets.length === 0) {
+      return DEFAULT_EMPLOYEE_VISIBILITY;
+    }
+
+    return visibility;
+  };
+
+  const setRole = async (target: OrgEmployee, role: OrgRole) => {
     if (!canAdminManage) return;
-    const updated: TenantAccessConfig = {
-      ...tenantAccessConfig,
-      [role]: {
-        ...tenantAccessConfig[role],
-        [moduleId]: enabled,
-      },
-    };
-    setTenantAccessConfig(updated);
-    saveTenantAccessConfig(updated);
-  };
-
-  const getPortalAccess = (email: string) => {
-    const key = normalize(email);
-    return portalAccessMap[key] !== false;
-  };
-
-  const getVisibility = (email: string): EmployeeVisibility => {
-    const key = normalize(email);
-    return visibilityMap[key] || DEFAULT_EMPLOYEE_VISIBILITY;
-  };
-
-  const setRole = (target: OrgEmployee, role: OrgRole) => {
-    if (!canAdminManage) return;
-    // UI updates instantly; backend user-role endpoint needs userId mapping (not employeeId).
-    setEmployees((prev) => prev.map((e) => (e.id === target.id ? { ...e, role } : e)));
-  };
-
-  const setPortalAccess = async (employee: OrgEmployee, enabled: boolean) => {
-    if (!canAdminManage) return;
-    const key = normalize(employee.email);
-    const allowedWidgets = Object.entries(DEFAULT_EMPLOYEE_VISIBILITY)
-      .filter(([, isEnabled]) => isEnabled)
-      .map(([widget]) => widget);
 
     try {
-      await huminexApi.updatePortalAccess(employee.id, enabled, allowedWidgets);
+      const updated = await huminexApi.updateEmployeeRole(target.id, role);
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.id === target.id
+            ? {
+                ...e,
+                role: mapApiRoleToOrgRole(updated.role),
+              }
+            : e
+        )
+      );
+      toast.success(`Role updated for ${target.name}`);
+    } catch (error) {
+      console.error("Failed to update employee role:", error);
+      toast.error(`Role update failed for ${target.name}`);
+    }
+  };
+
+  const persistPortalSettings = async (employee: OrgEmployee, isEnabled: boolean, allowedWidgets: string[]) => {
+    if (!canAdminManage) return;
+
+    const sanitized = sanitizeWidgets(allowedWidgets);
+
+    try {
+      await huminexApi.updatePortalAccess(employee.id, isEnabled, sanitized);
+      setAccessMap((prev) => ({
+        ...prev,
+        [employee.id]: {
+          isEnabled,
+          allowedWidgets: sanitized,
+        },
+      }));
     } catch (error) {
       console.error("Failed to update portal access in API:", error);
       toast.error(`Portal access update failed for ${employee.name}`);
-      return;
+      throw error;
     }
+  };
 
-    const updated = { ...portalAccessMap, [key]: enabled };
-    setPortalAccessMap(updated);
-    localStorage.setItem("huminex_employee_portal_access", JSON.stringify(updated));
+  const setPortalAccess = async (employee: OrgEmployee, enabled: boolean) => {
+    const currentWidgets = accessMap[employee.id]?.allowedWidgets ?? visibilityToWidgets(DEFAULT_EMPLOYEE_VISIBILITY);
+    await persistPortalSettings(employee, enabled, currentWidgets);
     toast.success(`Portal access ${enabled ? "enabled" : "disabled"} for ${employee.name}`);
   };
 
-  const setVisibilityFlag = (email: string, field: keyof EmployeeVisibility, enabled: boolean) => {
+  const setVisibilityFlag = async (employee: OrgEmployee, field: keyof EmployeeVisibility, enabled: boolean) => {
     if (!canAdminManage) return;
-    const key = normalize(email);
-    const updatedEntry = { ...getVisibility(email), [field]: enabled };
-    const updated = { ...visibilityMap, [key]: updatedEntry };
-    setVisibilityMap(updated);
-    localStorage.setItem("huminex_employee_visibility", JSON.stringify(updated));
-  };
 
-  const sendCredentials = (employee: OrgEmployee) => {
-    if (!canAdminManage) return;
-    toast.success(`Credentials email sent to ${employee.email}`);
-  };
+    const currentVisibility = getVisibility(employee.id);
+    const updatedVisibility = { ...currentVisibility, [field]: enabled };
+    const updatedWidgets = visibilityToWidgets(updatedVisibility);
 
-  const saveEmployeePolicy = (employee: OrgEmployee) => {
-    if (!canAdminManage) return;
-    const roleConfig = JSON.parse(localStorage.getItem("huminex_employee_role_overrides") || "{}");
-    roleConfig[normalize(employee.email)] = employee.role;
-    localStorage.setItem("huminex_employee_role_overrides", JSON.stringify(roleConfig));
-    toast.success(`Access policy saved for ${employee.name}`);
-  };
-
-  const applyVisibilityToAll = () => {
-    if (!canAdminManage) return;
-    const updated: Record<string, EmployeeVisibility> = {};
-    employees.forEach((emp) => {
-      updated[normalize(emp.email)] = { ...DEFAULT_EMPLOYEE_VISIBILITY };
-    });
-    setVisibilityMap(updated);
-    localStorage.setItem("huminex_employee_visibility", JSON.stringify(updated));
-    toast.success("Finance, payslips, insurance, benefits and documents enabled for all employees.");
-  };
-
-  const resetTenantRolePolicy = () => {
-    if (!canAdminManage) return;
-    const defaults = getDefaultTenantAccessConfig();
-    setTenantAccessConfig(defaults);
-    saveTenantAccessConfig(defaults);
-    toast.success("Employer role access policy reset to defaults.");
+    await persistPortalSettings(employee, getPortalAccess(employee.id), updatedWidgets);
   };
 
   return (
@@ -287,11 +270,11 @@ const TenantEmployees = () => {
         <div>
           <h1 className="text-2xl font-bold text-[#0F1E3A]">Employee Access Administration</h1>
           <p className="text-sm text-[#6B7280] mt-1">
-            Admin-only controls for role assignment, credentials, login access, and employee portal visibility.
+            Admin-only controls for role assignment, login access, and employee portal visibility.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge className="bg-[#005EEB]/10 text-[#005EEB]">Signed in as {ORG_ROLE_LABELS[actor.role]}</Badge>
+          {actor ? <Badge className="bg-[#005EEB]/10 text-[#005EEB]">Signed in as {ORG_ROLE_LABELS[actor.role]}</Badge> : null}
           <Badge variant="outline">{tenantRole || "employee"}</Badge>
         </div>
       </div>
@@ -303,60 +286,7 @@ const TenantEmployees = () => {
         <CardContent className="text-sm text-[#6B7280] space-y-1">
           <p>Visible employees: <strong>{visibleEmployees.length}</strong></p>
           <p>Manager chain: {managerChainLabel}</p>
-          <p>Source: {isSyncing ? "Syncing with HUMINEX API..." : "HUMINEX API / local fallback"}</p>
-          <div className="pt-2">
-            <Button size="sm" variant="outline" onClick={applyVisibilityToAll} disabled={!canAdminManage}>
-              <ShieldCheck className="h-4 w-4 mr-2" />
-              Apply Standard Employee Benefits Visibility to All
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Employer Role Access Policy</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-[#6B7280]">
-            Admin has full access to Employee Directory and Payroll for any employee. Configure what non-admin employer roles can access.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {TENANT_NON_ADMIN_ROLES.map((role) => (
-              <Button
-                key={role}
-                type="button"
-                size="sm"
-                variant={activePolicyRole === role ? "default" : "outline"}
-                onClick={() => setActivePolicyRole(role)}
-                disabled={!canAdminManage}
-              >
-                {TENANT_ROLE_LABELS[role]}
-              </Button>
-            ))}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={resetTenantRolePolicy}
-              disabled={!canAdminManage}
-            >
-              Reset Policy
-            </Button>
-          </div>
-
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {modulePolicyCatalog.map((module) => (
-              <div key={module.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-                <span className="text-xs text-[#6B7280]">{module.label}</span>
-                <Switch
-                  checked={Boolean(tenantAccessConfig[activePolicyRole][module.id])}
-                  onCheckedChange={(checked) => setTenantRoleModuleAccess(activePolicyRole, module.id, checked)}
-                  disabled={!canAdminManage}
-                />
-              </div>
-            ))}
-          </div>
+          <p>Source: {isSyncing ? "Syncing with HUMINEX API..." : "HUMINEX API"}</p>
         </CardContent>
       </Card>
 
@@ -381,8 +311,8 @@ const TenantEmployees = () => {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filteredEmployees.map((emp) => {
           const manager = emp.managerId ? employees.find((m) => m.id === emp.managerId) : null;
-          const visibility = getVisibility(emp.email);
-          const portalEnabled = getPortalAccess(emp.email);
+          const visibility = getVisibility(emp.id);
+          const portalEnabled = getPortalAccess(emp.id);
 
           return (
             <Card key={emp.id} className="border-gray-100">
@@ -404,7 +334,7 @@ const TenantEmployees = () => {
                   <p className="text-xs font-semibold text-[#0F1E3A]">Role Assignment</p>
                   <Select
                     value={emp.role}
-                    onValueChange={(value) => setRole(emp, value as OrgRole)}
+                    onValueChange={(value) => void setRole(emp, value as OrgRole)}
                     disabled={!canAdminManage}
                   >
                     <SelectTrigger className="h-9">
@@ -447,33 +377,11 @@ const TenantEmployees = () => {
                       <span className="text-xs text-[#6B7280]">{label}</span>
                       <Switch
                         checked={visibility[key]}
-                        onCheckedChange={(checked) => setVisibilityFlag(emp.email, key, checked)}
+                        onCheckedChange={(checked) => void setVisibilityFlag(emp, key, checked)}
                         disabled={!canAdminManage}
                       />
                     </div>
                   ))}
-                </div>
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 gap-1"
-                    onClick={() => sendCredentials(emp)}
-                    disabled={!canAdminManage}
-                  >
-                    <Mail className="h-3.5 w-3.5" />
-                    Send Credentials
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="h-8 gap-1 bg-[#005EEB] hover:bg-[#004BC4]"
-                    onClick={() => saveEmployeePolicy(emp)}
-                    disabled={!canAdminManage}
-                  >
-                    <Save className="h-3.5 w-3.5" />
-                    Save Policy
-                  </Button>
                 </div>
               </CardContent>
             </Card>

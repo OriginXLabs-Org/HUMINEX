@@ -35,6 +35,7 @@ public interface IOrganizationRepository
     Task<EmployeeEntity?> GetEmployeeByIdAsync(Guid employeeId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<EmployeeEntity>> GetManagerChainAsync(Guid employeeId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<EmployeeEntity>> GetDirectReportsAsync(Guid managerId, CancellationToken cancellationToken = default);
+    Task<EmployeeEntity?> UpdateEmployeeRoleAsync(Guid employeeId, string role, CancellationToken cancellationToken = default);
     Task UpdatePortalAccessAsync(Guid employeeId, bool isEnabled, IReadOnlyCollection<string> allowedWidgets, CancellationToken cancellationToken = default);
 }
 

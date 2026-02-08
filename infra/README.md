@@ -19,6 +19,7 @@ DataGrip connection:
 ## AKS + Argo CD (Starter Manifests)
 
 - Argo CD Application: `infra/argocd/apps/huminex-api-dev.yaml`
+- Argo CD UI ingress: `infra/argocd/argocd-server-ingress.yaml`
 - Kubernetes base: `infra/k8s/base`
 - Dev overlay: `infra/k8s/overlays/dev`
 - Key Vault CSI mapping: `infra/k8s/base/secret-provider-class.yaml`
@@ -38,6 +39,32 @@ Before applying:
    - `servicebus-fully-qualified-namespace`
    - `blob-service-uri`
    - `appconfig-endpoint`
+
+### Argo CD UI (Live, no localhost tunnel)
+
+Apply ingress:
+
+```bash
+kubectl apply -f infra/argocd/argocd-server-ingress.yaml
+```
+
+Live URL:
+
+```text
+https://huminex-argocd-dev.centralindia.cloudapp.azure.com
+```
+
+Admin username:
+
+```text
+admin
+```
+
+Admin password:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+```
 
 ## Canary Rollout
 

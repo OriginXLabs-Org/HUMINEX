@@ -55,6 +55,9 @@ export type EmployeeDto = {
   email: string;
   role: string;
   department: string;
+  managerEmployeeId: string | null;
+  isPortalAccessEnabled: boolean;
+  allowedWidgets: string[];
 };
 
 export type EmployeesPagedResponse = {
@@ -715,6 +718,15 @@ export const huminexApi = {
     apiRequest<EmployeesPagedResponse>(`/org/employees?page=${page}&pageSize=${pageSize}`, {}, accessToken),
   getEmployeeById: (employeeId: string, accessToken?: string) =>
     apiRequest<EmployeeDto>(`/org/employees/${employeeId}`, {}, accessToken),
+  updateEmployeeRole: (employeeId: string, role: string, accessToken?: string) =>
+    apiRequest<EmployeeDto>(
+      `/org/employees/${employeeId}/role`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ role }),
+      },
+      accessToken
+    ),
   getManagerChain: (employeeId: string, accessToken?: string) =>
     apiRequest<{ employeeId: string; chain: EmployeeDto[] }>(`/org/employees/${employeeId}/manager-chain`, {}, accessToken),
   getDirectReports: (managerId: string, accessToken?: string) =>

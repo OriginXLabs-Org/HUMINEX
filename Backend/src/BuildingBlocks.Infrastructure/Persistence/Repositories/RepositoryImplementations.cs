@@ -326,6 +326,19 @@ public sealed class OrganizationRepository(AppDbContext dbContext) : IOrganizati
             .ToArrayAsync(cancellationToken);
     }
 
+    public async Task<EmployeeEntity?> UpdateEmployeeRoleAsync(Guid employeeId, string role, CancellationToken cancellationToken = default)
+    {
+        var employee = await dbContext.Employees.FirstOrDefaultAsync(x => x.Id == employeeId, cancellationToken);
+        if (employee is null)
+        {
+            return null;
+        }
+
+        employee.UpdateRole(role);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return employee;
+    }
+
     public async Task UpdatePortalAccessAsync(Guid employeeId, bool isEnabled, IReadOnlyCollection<string> allowedWidgets, CancellationToken cancellationToken = default)
     {
         var employee = await dbContext.Employees.FirstOrDefaultAsync(x => x.Id == employeeId, cancellationToken)

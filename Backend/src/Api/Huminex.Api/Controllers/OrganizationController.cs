@@ -80,6 +80,36 @@ public sealed class OrganizationController(IOrganizationRepository organizationR
     }
 
     /// <summary>
+    /// Updates an employee's organization role inside tenant scope.
+    /// </summary>
+    /// <param name="employeeId">Employee identifier.</param>
+    /// <param name="request">Role update payload.</param>
+    /// <param name="cancellationToken">Request cancellation token.</param>
+    /// <returns>Updated employee details when found.</returns>
+    [HttpPut("employees/{employeeId:guid}/role")]
+    [Authorize(Policy = PermissionPolicies.OrgWrite)]
+    [ProducesResponseType(typeof(ApiEnvelope<EmployeeDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiEnvelope<EmployeeDto>>> UpdateEmployeeRole(Guid employeeId, [FromBody] UpdateEmployeeRoleRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Role))
+        {
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["role"] = ["Role is required."]
+            }));
+        }
+
+        var employee = await organizationRepository.UpdateEmployeeRoleAsync(employeeId, request.Role, cancellationToken);
+        if (employee is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(new ApiEnvelope<EmployeeDto>(ToDto(employee), HttpContext.TraceIdentifier));
+    }
+
+    /// <summary>
     /// Returns manager chain from direct manager to top-level manager.
     /// </summary>
     /// <param name="employeeId">Employee identifier.</param>
@@ -110,5 +140,14 @@ public sealed class OrganizationController(IOrganizationRepository organizationR
     }
 
     private static EmployeeDto ToDto(EmployeeEntity employee) =>
-        new(employee.Id, employee.EmployeeCode, employee.Name, employee.Email, employee.Role, employee.Department);
+        new(
+            employee.Id,
+            employee.EmployeeCode,
+            employee.Name,
+            employee.Email,
+            employee.Role,
+            employee.Department,
+            employee.ManagerEmployeeId,
+            employee.IsPortalAccessEnabled,
+            employee.AllowedWidgets);
 }

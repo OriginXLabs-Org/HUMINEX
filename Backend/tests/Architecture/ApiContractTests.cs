@@ -51,6 +51,7 @@ public class ApiContractTests
             "GET /api/v1/org/structure",
             "GET /api/v1/org/employees",
             "GET /api/v1/org/employees/{employeeId:guid}",
+            "PUT /api/v1/org/employees/{employeeId:guid}/role",
             "GET /api/v1/org/employees/{employeeId:guid}/manager-chain",
             "GET /api/v1/org/managers/{managerId:guid}/direct-reports",
             "PUT /api/v1/workforce/employees/{employeeId:guid}/portal-access",

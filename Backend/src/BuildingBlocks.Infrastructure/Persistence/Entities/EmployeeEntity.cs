@@ -47,6 +47,16 @@ public sealed class EmployeeEntity : Entity, ITenantEntity
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
+    public void UpdateRole(string role)
+    {
+        if (string.IsNullOrWhiteSpace(role))
+        {
+            throw new ArgumentException("Role cannot be empty.", nameof(role));
+        }
+
+        Role = role.Trim().ToLowerInvariant();
+    }
+
     public void UpdatePortalAccess(bool isEnabled, IReadOnlyCollection<string> allowedWidgets)
     {
         IsPortalAccessEnabled = isEnabled;
