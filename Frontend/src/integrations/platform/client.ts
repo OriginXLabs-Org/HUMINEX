@@ -23,11 +23,25 @@ type EntraAuthContext = {
 
 const SESSION_STORAGE_KEY = "huminex_api_session";
 const INTERNAL_ADMIN_EMAIL = "originxlabs@gmail.com";
+const HOSTED_DOMAIN_PATTERN = /(^|\.)gethuminex\.com$/i;
 const LOCAL_BYPASS_ENABLED =
   import.meta.env.DEV === true &&
   typeof window !== "undefined" &&
   ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
   String(import.meta.env.VITE_ENABLE_LOCAL_INTERNAL_ADMIN_BYPASS ?? "true").toLowerCase() !== "false";
+
+function resolveLoginModeForPortal(portal: "admin" | "tenant" | "default"): "popup" | "redirect" {
+  if (portal === "tenant") {
+    return "redirect";
+  }
+
+  if (typeof window !== "undefined" && HOSTED_DOMAIN_PATTERN.test(window.location.hostname) && portal === "admin") {
+    // Hosted internal admin auth is more reliable with redirect than popup transport.
+    return "redirect";
+  }
+
+  return "popup";
+}
 
 class QueryBuilder implements PromiseLike<ApiResult<any>> {
   private readonly payload: ApiResult<any>;
@@ -230,7 +244,7 @@ const auth = {
       const result = await loginWithMicrosoft(payload.email, {
         portal: payload.portal ?? "default",
         redirectUri: payload.redirectUri,
-        mode: payload.portal === "tenant" ? "redirect" : "popup",
+        mode: resolveLoginModeForPortal(payload.portal ?? "default"),
       });
       const claims = (result.idTokenClaims ?? {}) as Record<string, unknown>;
       const authMethods = normalizeStringArrayClaim(claims.amr);
