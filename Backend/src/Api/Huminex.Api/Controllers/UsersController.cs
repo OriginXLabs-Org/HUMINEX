@@ -46,11 +46,18 @@ public sealed class UsersController(IUserRepository userRepository, ITenantProvi
     /// <param name="cancellationToken">Request cancellation token.</param>
     /// <returns>No content when role update succeeds.</returns>
     [HttpPut("users/{id:guid}/roles")]
-    [Authorize(Roles = "Admin")]
     [Authorize(Policy = PermissionPolicies.UserRoleWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateRoles(Guid id, [FromBody] UpdateUserRolesRequest request, CancellationToken cancellationToken)
     {
+        // Prevent cross-tenant role manipulation: user lookup uses tenant query filters.
+        var existing = await userRepository.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return NotFound();
+        }
+
         await userRepository.UpdateRolesAsync(id, request.Roles, cancellationToken);
         return NoContent();
     }

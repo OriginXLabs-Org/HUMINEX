@@ -114,6 +114,113 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UsersMe_ShouldReturnForbidden_WhenPermissionMissing()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/users/me");
+        request.Headers.Add("X-Tenant-Id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        request.Headers.Add("X-User-Id", "11111111-1111-1111-1111-111111111111");
+        request.Headers.Add("X-User-Email", "tenanta-employee@gethuminex.com");
+        request.Headers.Add("X-User-Role", "employee");
+        request.Headers.Add("X-User-Permissions", "org.read"); // intentionally missing user.read.self
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RbacRoles_ShouldReturnForbidden_WhenPermissionMissing()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/rbac/roles");
+        request.Headers.Add("X-Tenant-Id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        request.Headers.Add("X-User-Id", "11111111-1111-1111-1111-111111111111");
+        request.Headers.Add("X-User-Email", "tenanta-employee@gethuminex.com");
+        request.Headers.Add("X-User-Role", "employee");
+        request.Headers.Add("X-User-Permissions", "user.read.self"); // intentionally missing rbac.read
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RbacCreateRole_ShouldReturnForbidden_WhenPermissionMissing()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/rbac/roles")
+        {
+            Content = JsonContent.Create(new { name = "finance_manager", description = "Finance Manager" })
+        };
+        request.Headers.Add("X-Tenant-Id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        request.Headers.Add("X-User-Id", "11111111-1111-1111-1111-111111111111");
+        request.Headers.Add("X-User-Email", "tenanta-employee@gethuminex.com");
+        request.Headers.Add("X-User-Role", "employee");
+        request.Headers.Add("X-User-Permissions", "rbac.read"); // intentionally missing rbac.write
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RbacCreateRole_ShouldSucceed_WhenPermissionPresent()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/rbac/roles")
+        {
+            Content = JsonContent.Create(new { name = "finance_manager", description = "Finance Manager" })
+        };
+        request.Headers.Add("X-Tenant-Id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        request.Headers.Add("X-User-Id", "11111111-1111-1111-1111-111111111111");
+        request.Headers.Add("X-User-Email", "tenanta-admin@gethuminex.com");
+        request.Headers.Add("X-User-Role", "admin");
+        request.Headers.Add("X-User-Permissions", "rbac.write,rbac.read");
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UsersUpdateRoles_ShouldReturnNotFound_WhenTargetUserOutsideTenant()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        var tenantBUserId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        await SeedUserAsync(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), tenantBUserId, "tenantb-user@gethuminex.com");
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/users/{tenantBUserId}/roles")
+        {
+            Content = JsonContent.Create(new { roles = new[] { "employee" } })
+        };
+        request.Headers.Add("X-Tenant-Id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        request.Headers.Add("X-User-Id", "11111111-1111-1111-1111-111111111111");
+        request.Headers.Add("X-User-Email", "tenanta-admin@gethuminex.com");
+        request.Headers.Add("X-User-Role", "admin");
+        request.Headers.Add("X-User-Permissions", "user.roles.write");
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task PayrollCreateRun_ShouldReplayResponse_WhenIdempotencyKeyRepeated()
     {
         if (_client is null)
@@ -223,6 +330,23 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         }
 
         await dbContext.SaveChangesAsync();
+    }
+
+    private async Task SeedUserAsync(Guid tenantId, Guid userId, string email)
+    {
+        if (_factory is null)
+        {
+            return;
+        }
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        if (!await dbContext.Users.IgnoreQueryFilters().AnyAsync(x => x.Id == userId))
+        {
+            dbContext.Users.Add(new AppUserEntity(tenantId, userId, email.Split('@')[0], email));
+            await dbContext.SaveChangesAsync();
+        }
     }
 
     private static async Task<IReadOnlyCollection<string>> ExtractEmployeeCodesAsync(HttpResponseMessage response)

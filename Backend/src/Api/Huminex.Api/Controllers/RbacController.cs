@@ -31,7 +31,6 @@ public sealed class RbacController(IRbacRepository rbacRepository) : ControllerB
     }
 
     [HttpPost("roles")]
-    [Authorize(Roles = "Admin")]
     [Authorize(Policy = PermissionPolicies.RbacWrite)]
     [ProducesResponseType(typeof(ApiEnvelope<RoleResponse>), StatusCodes.Status201Created)]
     public async Task<ActionResult<ApiEnvelope<RoleResponse>>> CreateRole([FromBody] CreateRoleRequest request, CancellationToken cancellationToken)
@@ -47,7 +46,6 @@ public sealed class RbacController(IRbacRepository rbacRepository) : ControllerB
     }
 
     [HttpPut("roles/{id:guid}")]
-    [Authorize(Roles = "Admin")]
     [Authorize(Policy = PermissionPolicies.RbacWrite)]
     [ProducesResponseType(typeof(ApiEnvelope<RoleResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -69,7 +67,6 @@ public sealed class RbacController(IRbacRepository rbacRepository) : ControllerB
     }
 
     [HttpDelete("roles/{id:guid}")]
-    [Authorize(Roles = "Admin")]
     [Authorize(Policy = PermissionPolicies.RbacWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -110,7 +107,6 @@ public sealed class RbacController(IRbacRepository rbacRepository) : ControllerB
     /// <param name="cancellationToken">Request cancellation token.</param>
     /// <returns>No content when policy upsert succeeds.</returns>
     [HttpPut("policies/{id}")]
-    [Authorize(Roles = "Admin")]
     [Authorize(Policy = PermissionPolicies.RbacWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> UpdatePolicy(string id, [FromBody] UpdatePolicyRequest request, CancellationToken cancellationToken)
