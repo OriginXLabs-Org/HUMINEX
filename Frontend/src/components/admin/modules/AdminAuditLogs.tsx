@@ -1,78 +1,112 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { platformClient as platform } from "@/integrations/platform/client";
+import { huminexApi } from "@/integrations/api/client";
 import { RefreshCw, Search, Activity, User, FileText, Settings, Loader2 } from "lucide-react";
 
-interface AuditLog {
+type AuditLog = {
   id: string;
   user_id: string;
   action: string;
   entity_type: string;
   entity_id: string | null;
-  old_values: any;
-  new_values: any;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
   ip_address: string | null;
   created_at: string;
+};
+
+const LOCAL_BYPASS_ENABLED =
+  import.meta.env.DEV === true &&
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+  String(import.meta.env.VITE_ENABLE_LOCAL_INTERNAL_ADMIN_BYPASS ?? "true").toLowerCase() !== "false";
+
+function getActionIcon(action: string) {
+  const normalized = action.toLowerCase();
+  if (normalized.includes("user") || normalized.includes("profile")) return User;
+  if (normalized.includes("quote") || normalized.includes("invoice")) return FileText;
+  if (normalized.includes("setting")) return Settings;
+  return Activity;
+}
+
+function getActionColor(action: string) {
+  const normalized = action.toLowerCase();
+  if (normalized.includes("create") || normalized.includes("approve") || normalized.includes("success")) {
+    return "bg-emerald-100 text-emerald-800";
+  }
+  if (normalized.includes("update") || normalized.includes("edit")) {
+    return "bg-blue-100 text-blue-800";
+  }
+  if (normalized.includes("delete") || normalized.includes("reject") || normalized.includes("failure") || normalized.includes("blocked")) {
+    return "bg-red-100 text-red-800";
+  }
+  return "bg-slate-100 text-slate-800";
+}
+
+async function fetchAuditLogs(): Promise<AuditLog[]> {
+  if (LOCAL_BYPASS_ENABLED) {
+    try {
+      const raw = localStorage.getItem("huminex_admin_auth_audit");
+      const entries = raw ? (JSON.parse(raw) as Array<{ timestamp: string; status: string; reason: string; portal: string }>) : [];
+      return entries
+        .slice(-100)
+        .reverse()
+        .map((entry, index) => ({
+          id: `local-${index}-${entry.timestamp}`,
+          user_id: "local-admin",
+          action: `admin_auth_${entry.status}`,
+          entity_type: entry.portal || "internal_admin",
+          entity_id: "/admin/login",
+          old_values: null,
+          new_values: { reason: entry.reason },
+          ip_address: null,
+          created_at: entry.timestamp,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  const logs = await huminexApi.getInternalAuditLogs(100);
+  return logs.map((log) => ({
+    id: log.id,
+    user_id: log.actorUserId,
+    action: log.action,
+    entity_type: log.resourceType,
+    entity_id: log.resourceId,
+    old_values: null,
+    new_values: log.metadataJson ? { metadataJson: log.metadataJson, outcome: log.outcome, actorEmail: log.actorEmail } : null,
+    ip_address: null,
+    created_at: log.occurredAtUtc,
+  }));
 }
 
 export const AdminAuditLogs = () => {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const fetchLogs = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await platform
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
+  const {
+    data: logs = [],
+    isLoading: loading,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ["internal-admin-audit-logs"],
+    queryFn: fetchAuditLogs,
+    refetchInterval: 10000,
+    refetchOnWindowFocus: false,
+  });
 
-      if (error) throw error;
-      setLogs(data || []);
-    } catch (error) {
-      console.error('Error fetching logs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLogs();
-
-    const channel = platform
-      .channel('audit-logs')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, (payload) => {
-        setLogs(prev => [payload.new as AuditLog, ...prev.slice(0, 99)]);
-      })
-      .subscribe();
-
-    return () => {
-      platform.removeChannel(channel);
-    };
-  }, []);
-
-  const getActionIcon = (action: string) => {
-    if (action.includes('user') || action.includes('profile')) return User;
-    if (action.includes('quote') || action.includes('invoice')) return FileText;
-    if (action.includes('setting')) return Settings;
-    return Activity;
-  };
-
-  const getActionColor = (action: string) => {
-    if (action.includes('create') || action.includes('approve')) return "bg-emerald-100 text-emerald-800";
-    if (action.includes('update') || action.includes('edit')) return "bg-blue-100 text-blue-800";
-    if (action.includes('delete') || action.includes('reject')) return "bg-red-100 text-red-800";
-    return "bg-slate-100 text-slate-800";
-  };
-
-  const filteredLogs = logs.filter(log =>
-    log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    log.entity_type.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredLogs = useMemo(
+    () =>
+      logs.filter((log) =>
+        log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.entity_type.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [logs, searchQuery]
   );
 
   return (
@@ -80,10 +114,10 @@ export const AdminAuditLogs = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-heading font-bold text-foreground">Audit Logs</h1>
-          <p className="text-muted-foreground">Track all system activities in real-time</p>
+          <p className="text-muted-foreground">Track internal admin and platform activities</p>
         </div>
-        <Button onClick={fetchLogs} disabled={loading} variant="outline" className="gap-2">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        <Button onClick={() => refetch()} disabled={loading || isFetching} variant="outline" className="gap-2">
+          <RefreshCw className={`h-4 w-4 ${loading || isFetching ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
@@ -130,9 +164,7 @@ export const AdminAuditLogs = () => {
                         <Badge className={getActionColor(log.action)}>{log.action}</Badge>
                         <span className="text-sm text-muted-foreground">{log.entity_type}</span>
                         {log.entity_id && (
-                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                            {log.entity_id.slice(0, 8)}...
-                          </code>
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{log.entity_id.slice(0, 24)}</code>
                         )}
                       </div>
                       {log.new_values && Object.keys(log.new_values).length > 0 && (

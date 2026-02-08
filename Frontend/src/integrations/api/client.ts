@@ -108,6 +108,76 @@ export type InternalAdminAuditLogResponse = {
   occurredAtUtc: string;
 };
 
+export type InternalEmployerUserResponse = {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  roles: string[];
+  createdAtUtc: string;
+};
+
+export type InternalAdminUserResponse = {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  roles: string[];
+  createdAtUtc: string;
+};
+
+export type InternalSystemLogResponse = {
+  id: string;
+  level: string;
+  source: string;
+  message: string;
+  metadataJson: string;
+  createdAtUtc: string;
+};
+
+export type InternalSystemHealthCheckResponse = {
+  name: string;
+  status: string;
+  latency: string;
+  description: string;
+};
+
+export type InternalSystemHealthResponse = {
+  status: string;
+  checkedAtUtc: string;
+  checks: InternalSystemHealthCheckResponse[];
+};
+
+export type InternalAdminQuoteResponse = {
+  id: string;
+  tenantId: string;
+  userId: string;
+  quoteNumber: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  contactCompany: string;
+  clientType: string;
+  serviceType: string;
+  complexity: string;
+  estimatedPrice: number;
+  discountPercent: number;
+  finalPrice: number;
+  status: string;
+  notes: string;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+};
+
+export type InternalAdminQuoteConversionResponse = {
+  quoteId: string;
+  quoteNumber: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  invoiceStatus: string;
+  invoiceTotalAmount: number;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api/v1";
 const SESSION_STORAGE_KEY = "huminex_api_session";
 
@@ -202,10 +272,61 @@ export const huminexApi = {
     apiRequest<InternalAdminSummaryResponse>("/admin/internal/summary", {}, accessToken),
   getInternalEmployers: (limit = 50, accessToken?: string) =>
     apiRequest<EmployerOverviewResponse[]>(`/admin/internal/employers?limit=${limit}`, {}, accessToken),
+  getInternalEmployerById: (tenantId: string, accessToken?: string) =>
+    apiRequest<EmployerOverviewResponse>(`/admin/internal/employers/${tenantId}`, {}, accessToken),
+  getInternalEmployerUsers: (tenantId: string, limit = 100, accessToken?: string) =>
+    apiRequest<InternalEmployerUserResponse[]>(
+      `/admin/internal/employers/${tenantId}/users?limit=${limit}`,
+      {},
+      accessToken
+    ),
+  getInternalUsers: (limit = 200, search?: string, tenantId?: string, accessToken?: string) =>
+    apiRequest<InternalAdminUserResponse[]>(
+      `/admin/internal/users?limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ""}${tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : ""}`,
+      {},
+      accessToken
+    ),
+  getInternalEmployerActivity: (tenantId: string, limit = 100, sinceUtc?: string, accessToken?: string) =>
+    apiRequest<InternalAdminAuditLogResponse[]>(
+      `/admin/internal/employers/${tenantId}/activity?limit=${limit}${sinceUtc ? `&sinceUtc=${encodeURIComponent(sinceUtc)}` : ""}`,
+      {},
+      accessToken
+    ),
   getInternalAuditLogs: (limit = 100, sinceUtc?: string, accessToken?: string) =>
     apiRequest<InternalAdminAuditLogResponse[]>(
       `/admin/internal/audit-logs?limit=${limit}${sinceUtc ? `&sinceUtc=${encodeURIComponent(sinceUtc)}` : ""}`,
       {},
+      accessToken
+    ),
+  getInternalSystemLogs: (level = "all", limit = 200, accessToken?: string) =>
+    apiRequest<InternalSystemLogResponse[]>(
+      `/admin/internal/system-logs?level=${encodeURIComponent(level)}&limit=${limit}`,
+      {},
+      accessToken
+    ),
+  getInternalSystemHealth: (accessToken?: string) =>
+    apiRequest<InternalSystemHealthResponse>("/admin/internal/system-health", {}, accessToken),
+  getInternalQuotes: (limit = 200, status = "all", search?: string, accessToken?: string) =>
+    apiRequest<InternalAdminQuoteResponse[]>(
+      `/admin/internal/quotes?limit=${limit}&status=${encodeURIComponent(status)}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+      {},
+      accessToken
+    ),
+  updateInternalQuoteStatus: (quoteId: string, status: "draft" | "pending" | "approved" | "rejected" | "converted", accessToken?: string) =>
+    apiRequest<InternalAdminQuoteResponse>(
+      `/admin/internal/quotes/${quoteId}/status`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ status }),
+      },
+      accessToken
+    ),
+  convertInternalQuoteToInvoice: (quoteId: string, accessToken?: string) =>
+    apiRequest<InternalAdminQuoteConversionResponse>(
+      `/admin/internal/quotes/${quoteId}/convert-to-invoice`,
+      {
+        method: "POST",
+      },
       accessToken
     ),
   me: (accessToken?: string) => apiRequest<UserProfileResponse>("/users/me", {}, accessToken),

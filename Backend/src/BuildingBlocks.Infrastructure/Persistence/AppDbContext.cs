@@ -18,6 +18,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<EmployeeEntity> Employees => Set<EmployeeEntity>();
     public DbSet<PayrollRunEntity> PayrollRuns => Set<PayrollRunEntity>();
     public DbSet<PayslipEntity> Payslips => Set<PayslipEntity>();
+    public DbSet<QuoteEntity> Quotes => Set<QuoteEntity>();
+    public DbSet<InvoiceEntity> Invoices => Set<InvoiceEntity>();
     public DbSet<IdempotencyRecordEntity> IdempotencyRecords => Set<IdempotencyRecordEntity>();
     public DbSet<AuditTrailEntity> AuditTrails => Set<AuditTrailEntity>();
 
@@ -108,6 +110,41 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.PayrollRun).WithMany(x => x.Payslips).HasForeignKey(x => x.PayrollRunId);
         });
 
+        modelBuilder.Entity<QuoteEntity>(entity =>
+        {
+            entity.ToTable("quotes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.QuoteNumber).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.ContactName).HasMaxLength(180).IsRequired();
+            entity.Property(x => x.ContactEmail).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ContactPhone).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ContactCompany).HasMaxLength(180).IsRequired();
+            entity.Property(x => x.ClientType).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ServiceType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Complexity).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.EstimatedPrice).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.DiscountPercent).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.FinalPrice).HasColumnType("numeric(18,2)");
+            entity.HasIndex(x => new { x.TenantId, x.QuoteNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<InvoiceEntity>(entity =>
+        {
+            entity.ToTable("invoices");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.InvoiceNumber).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.TaxPercent).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.TaxAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.TotalAmount).HasColumnType("numeric(18,2)");
+            entity.HasIndex(x => new { x.TenantId, x.InvoiceNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAtUtc });
+        });
+
         modelBuilder.Entity<IdempotencyRecordEntity>(entity =>
         {
             entity.ToTable("idempotency_records");
@@ -141,6 +178,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         ApplyTenantQueryFilter<EmployeeEntity>(modelBuilder);
         ApplyTenantQueryFilter<PayrollRunEntity>(modelBuilder);
         ApplyTenantQueryFilter<PayslipEntity>(modelBuilder);
+        ApplyTenantQueryFilter<QuoteEntity>(modelBuilder);
+        ApplyTenantQueryFilter<InvoiceEntity>(modelBuilder);
         ApplyTenantQueryFilter<IdempotencyRecordEntity>(modelBuilder);
         ApplyTenantQueryFilter<AuditTrailEntity>(modelBuilder);
     }

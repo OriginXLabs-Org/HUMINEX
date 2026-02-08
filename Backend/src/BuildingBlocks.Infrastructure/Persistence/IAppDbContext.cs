@@ -13,6 +13,8 @@ public interface IAppDbContext
     DbSet<EmployeeEntity> Employees { get; }
     DbSet<PayrollRunEntity> PayrollRuns { get; }
     DbSet<PayslipEntity> Payslips { get; }
+    DbSet<QuoteEntity> Quotes { get; }
+    DbSet<InvoiceEntity> Invoices { get; }
     DbSet<IdempotencyRecordEntity> IdempotencyRecords { get; }
     DbSet<AuditTrailEntity> AuditTrails { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

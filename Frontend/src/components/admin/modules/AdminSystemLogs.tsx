@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { platformClient as platform } from "@/integrations/platform/client";
+import { huminexApi } from "@/integrations/api/client";
 import { RefreshCw, Search, Terminal, AlertCircle, AlertTriangle, Info, Bug, Loader2 } from "lucide-react";
 import {
   Select,
@@ -13,76 +14,100 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface SystemLog {
+type SystemLog = {
   id: string;
   level: string;
   source: string;
   message: string;
-  metadata: any;
+  metadata: Record<string, unknown> | null;
   created_at: string;
+};
+
+const LOCAL_BYPASS_ENABLED =
+  import.meta.env.DEV === true &&
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+  String(import.meta.env.VITE_ENABLE_LOCAL_INTERNAL_ADMIN_BYPASS ?? "true").toLowerCase() !== "false";
+
+const levelIcons: Record<string, any> = {
+  info: Info,
+  warning: AlertTriangle,
+  error: AlertCircle,
+  debug: Bug,
+};
+
+const levelColors: Record<string, string> = {
+  info: "bg-blue-100 text-blue-800",
+  warning: "bg-amber-100 text-amber-800",
+  error: "bg-red-100 text-red-800",
+  debug: "bg-slate-100 text-slate-800",
+};
+
+async function fetchSystemLogs(levelFilter: string): Promise<SystemLog[]> {
+  if (LOCAL_BYPASS_ENABLED) {
+    try {
+      const raw = localStorage.getItem("huminex_admin_auth_audit");
+      const entries = raw ? (JSON.parse(raw) as Array<{ timestamp: string; status: string; reason: string; portal: string }>) : [];
+      return entries
+        .slice(-200)
+        .reverse()
+        .map((entry, index) => ({
+          id: `local-system-${index}-${entry.timestamp}`,
+          level: entry.status === "failure" ? "error" : entry.status === "blocked" ? "warning" : "info",
+          source: entry.portal || "internal_admin",
+          message: `admin_auth_${entry.status}: ${entry.reason}`,
+          metadata: { localBypass: true },
+          created_at: entry.timestamp,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  const logs = await huminexApi.getInternalSystemLogs(levelFilter, 200);
+  return logs.map((log) => {
+    let metadata: Record<string, unknown> | null = null;
+    try {
+      metadata = log.metadataJson ? (JSON.parse(log.metadataJson) as Record<string, unknown>) : null;
+    } catch {
+      metadata = { raw: log.metadataJson };
+    }
+
+    return {
+      id: log.id,
+      level: log.level,
+      source: log.source,
+      message: log.message,
+      metadata,
+      created_at: log.createdAtUtc,
+    };
+  });
 }
 
 export const AdminSystemLogs = () => {
-  const [logs, setLogs] = useState<SystemLog[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [levelFilter, setLevelFilter] = useState("all");
 
-  const fetchLogs = async () => {
-    setLoading(true);
-    try {
-      let query = platform
-        .from('system_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
+  const {
+    data: logs = [],
+    isLoading: loading,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: ["internal-admin-system-logs", levelFilter],
+    queryFn: () => fetchSystemLogs(levelFilter),
+    refetchInterval: 10000,
+    refetchOnWindowFocus: false,
+  });
 
-      if (levelFilter !== 'all') {
-        query = query.eq('level', levelFilter);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setLogs(data || []);
-    } catch (error) {
-      console.error('Error fetching logs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLogs();
-
-    const channel = platform
-      .channel('system-logs')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_logs' }, (payload) => {
-        setLogs(prev => [payload.new as SystemLog, ...prev.slice(0, 199)]);
-      })
-      .subscribe();
-
-    return () => {
-      platform.removeChannel(channel);
-    };
-  }, [levelFilter]);
-
-  const levelIcons: Record<string, any> = {
-    info: Info,
-    warning: AlertTriangle,
-    error: AlertCircle,
-    debug: Bug,
-  };
-
-  const levelColors: Record<string, string> = {
-    info: "bg-blue-100 text-blue-800",
-    warning: "bg-amber-100 text-amber-800",
-    error: "bg-red-100 text-red-800",
-    debug: "bg-slate-100 text-slate-800",
-  };
-
-  const filteredLogs = logs.filter(log =>
-    log.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    log.source.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredLogs = useMemo(
+    () =>
+      logs.filter(
+        (log) =>
+          log.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          log.source.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [logs, searchQuery]
   );
 
   return (
@@ -90,10 +115,10 @@ export const AdminSystemLogs = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-heading font-bold text-foreground">System Logs</h1>
-          <p className="text-muted-foreground">Real-time system and application logs</p>
+          <p className="text-muted-foreground">Internal admin event stream and system-level logs</p>
         </div>
-        <Button onClick={fetchLogs} disabled={loading} variant="outline" className="gap-2">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        <Button onClick={() => refetch()} disabled={loading || isFetching} variant="outline" className="gap-2">
+          <RefreshCw className={`h-4 w-4 ${loading || isFetching ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
@@ -147,10 +172,12 @@ export const AdminSystemLogs = () => {
                     <span className="text-xs text-muted-foreground whitespace-nowrap">
                       {new Date(log.created_at).toLocaleTimeString()}
                     </span>
-                    <Badge className={`${levelColors[log.level]} text-xs px-1.5`}>
+                    <Badge className={`${levelColors[log.level] || levelColors.info} text-xs px-1.5`}>
                       {log.level.toUpperCase()}
                     </Badge>
-                    <span className="text-cyan-600 whitespace-nowrap">[{log.source}]</span>
+                    <span className="text-cyan-600 whitespace-nowrap flex items-center gap-1">
+                      <Icon className="h-3.5 w-3.5" />[{log.source}]
+                    </span>
                     <span className="flex-1 break-all">{log.message}</span>
                   </div>
                 );

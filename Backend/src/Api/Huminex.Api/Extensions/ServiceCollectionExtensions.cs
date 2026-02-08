@@ -82,6 +82,11 @@ public static class ServiceCollectionExtensions
             options.TagActionsBy(apiDescription =>
             {
                 var relativePath = apiDescription.RelativePath?.ToLowerInvariant() ?? string.Empty;
+                if (relativePath.Contains("/admin/internal") || relativePath.Contains("/system/admin-auth-audit"))
+                {
+                    return ["HUMINEX Admin"];
+                }
+
                 if (relativePath.Contains("/users") || relativePath.Contains("/rbac"))
                 {
                     return ["Identity & Access"];

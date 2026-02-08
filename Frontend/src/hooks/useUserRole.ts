@@ -3,7 +3,7 @@ import { huminexApi } from "@/integrations/api/client";
 import { useAuth } from "./useAuth";
 
 export const useUserRole = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const localBypassEnabled =
@@ -14,6 +14,12 @@ export const useUserRole = () => {
 
   useEffect(() => {
     const checkAdminRole = async () => {
+      if (authLoading) {
+        return;
+      }
+
+      setLoading(true);
+
       if (!user) {
         setIsAdmin(false);
         setLoading(false);
@@ -22,7 +28,10 @@ export const useUserRole = () => {
 
       if (
         localBypassEnabled &&
-        String(user.email || "").toLowerCase() === "originxlabs@gmail.com"
+        (
+          String(user.email || "").toLowerCase() === "originxlabs@gmail.com" ||
+          Boolean((user.user_metadata as Record<string, unknown> | undefined)?.local_bypass)
+        )
       ) {
         setIsAdmin(true);
         setLoading(false);
@@ -42,7 +51,7 @@ export const useUserRole = () => {
     };
 
     checkAdminRole();
-  }, [user, localBypassEnabled]);
+  }, [user, authLoading, localBypassEnabled]);
 
   return { isAdmin, loading };
 };

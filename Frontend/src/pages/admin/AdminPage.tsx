@@ -88,8 +88,8 @@ const AdminPage = () => {
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/admin/login");
-    } else if (!authLoading && !roleLoading && !isAdmin) {
-      navigate("/portal");
+    } else if (!authLoading && !roleLoading && user && !isAdmin) {
+      navigate("/admin/login", { replace: true });
     }
   }, [user, authLoading, isAdmin, roleLoading, navigate]);
 
