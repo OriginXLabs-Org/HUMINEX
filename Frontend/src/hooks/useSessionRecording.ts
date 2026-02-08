@@ -124,21 +124,24 @@ const isPageExcluded = (excludedPages: string[]): boolean => {
 // Fetch geolocation from IP
 const fetchGeolocation = async (): Promise<GeolocationData | null> => {
   try {
-    const response = await fetch("https://ipapi.co/json/", {
+    const response = await fetch("https://ipwho.is/?output=json", {
       signal: AbortSignal.timeout(5000),
     });
     if (response.ok) {
       const data = await response.json();
+      if (data && data.success === false) {
+        return null;
+      }
       return {
-        ip: data.ip,
-        city: data.city,
-        region: data.region,
-        country: data.country_name,
-        country_code: data.country_code,
-        latitude: data.latitude,
-        longitude: data.longitude,
+        ip: data.ip ?? "",
+        city: data.city ?? "",
+        region: data.region ?? "",
+        country: data.country ?? "",
+        country_code: data.country_code ?? "",
+        latitude: Number(data.latitude ?? 0),
+        longitude: Number(data.longitude ?? 0),
         timezone: data.timezone,
-        org: data.org,
+        org: data.connection?.org ?? data.connection?.isp ?? "",
       };
     }
   } catch {

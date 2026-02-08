@@ -157,32 +157,88 @@ function normalizeStringArrayClaim(value: unknown): string[] {
   return [];
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function readStringClaim(claims: Record<string, unknown> | null, ...keys: string[]): string | null {
+  if (!claims) return null;
+  for (const key of keys) {
+    const value = claims[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
 async function buildSessionFromApiToken(
   accessToken: string,
   refreshToken: string,
   expiresAtUtc: string,
   entraAuthContext?: EntraAuthContext
 ): Promise<AuthSession> {
-  const profile = await huminexApi.me(accessToken);
-  const session: AuthSession = {
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    expires_at: Math.floor(new Date(expiresAtUtc).getTime() / 1000),
-    user: {
-      id: profile.userId,
-      email: profile.email,
-      user_metadata: {
-        full_name: profile.name,
-        role: profile.role,
-        tenant_id: profile.tenantId,
-        auth_methods: entraAuthContext?.authMethods ?? [],
-        auth_strength: entraAuthContext?.authStrength ?? "",
+  try {
+    const profile = await huminexApi.me(accessToken);
+    const session: AuthSession = {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: Math.floor(new Date(expiresAtUtc).getTime() / 1000),
+      user: {
+        id: profile.userId,
+        email: profile.email,
+        user_metadata: {
+          full_name: profile.name,
+          role: profile.role,
+          tenant_id: profile.tenantId,
+          auth_methods: entraAuthContext?.authMethods ?? [],
+          auth_strength: entraAuthContext?.authStrength ?? "",
+        },
       },
-    },
-  };
-  localStorage.setItem("huminex_tenant_role", profile.role);
-  localStorage.setItem("huminex_tenant_id", profile.tenantId);
-  return session;
+    };
+    localStorage.setItem("huminex_tenant_role", profile.role);
+    localStorage.setItem("huminex_tenant_id", profile.tenantId);
+    return session;
+  } catch (error) {
+    // Keep user signed in using token claims when profile endpoint is temporarily unavailable.
+    const claims = decodeJwtPayload(accessToken) ?? decodeJwtPayload(refreshToken);
+    const fallbackEmail = readStringClaim(claims, "preferred_username", "upn", "email", "unique_name") ?? "unknown@gethuminex.com";
+    const fallbackUserId = readStringClaim(claims, "oid", "sub") ?? "00000000-0000-0000-0000-000000000000";
+    const fallbackTenantId = readStringClaim(claims, "tid") ?? "00000000-0000-0000-0000-000000000000";
+    const rawRoles = claims?.roles;
+    const fallbackRole = Array.isArray(rawRoles) && typeof rawRoles[0] === "string" ? rawRoles[0] : "user";
+
+    localStorage.setItem("huminex_tenant_role", fallbackRole);
+    localStorage.setItem("huminex_tenant_id", fallbackTenantId);
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: Math.floor(new Date(expiresAtUtc).getTime() / 1000),
+      user: {
+        id: fallbackUserId,
+        email: fallbackEmail,
+        user_metadata: {
+          full_name: readStringClaim(claims, "name") ?? fallbackEmail.split("@")[0],
+          role: fallbackRole,
+          tenant_id: fallbackTenantId,
+          auth_methods: entraAuthContext?.authMethods ?? [],
+          auth_strength: entraAuthContext?.authStrength ?? "",
+          profile_fallback: true,
+        },
+      },
+    };
+  }
 }
 
 const auth = {

@@ -22,33 +22,36 @@ const getGeolocation = async (): Promise<Record<string, any> | null> => {
   }
 
   try {
-    // Try ipapi.co first
-    const response = await fetch("https://ipapi.co/json/", { 
+    // Use a CORS-friendly endpoint for browser clients.
+    const response = await fetch("https://ipwho.is/?output=json", {
       signal: AbortSignal.timeout(3000) 
     });
     if (response.ok) {
       const data = await response.json();
+      if (data && data.success === false) {
+        return null;
+      }
       const geoData = {
-        ip: data.ip,
-        city: data.city,
-        region: data.region,
-        country: data.country_name,
-        country_code: data.country_code,
-        latitude: data.latitude,
-        longitude: data.longitude,
+        ip: data.ip ?? null,
+        city: data.city ?? null,
+        region: data.region ?? null,
+        country: data.country ?? null,
+        country_code: data.country_code ?? null,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
         timezone: data.timezone,
-        org: data.org,
+        org: data.connection?.org || data.connection?.isp || null,
       };
       sessionStorage.setItem("clickstream_geolocation", JSON.stringify(geoData));
       return geoData;
     }
-  } catch (e) {
-    console.warn("Primary geolocation API failed, trying fallback");
+  } catch {
+    // Continue with fallback.
   }
 
   try {
     // Fallback to ip-api.com
-    const response = await fetch("http://ip-api.com/json/?fields=status,message,country,countryCode,region,regionName,city,lat,lon,timezone,isp,org,query", {
+    const response = await fetch("https://ip-api.com/json/?fields=status,message,country,countryCode,region,regionName,city,lat,lon,timezone,isp,org,query", {
       signal: AbortSignal.timeout(3000)
     });
     if (response.ok) {
@@ -69,8 +72,8 @@ const getGeolocation = async (): Promise<Record<string, any> | null> => {
         return geoData;
       }
     }
-  } catch (e) {
-    console.warn("Fallback geolocation API also failed");
+  } catch {
+    // No-op.
   }
 
   return null;
