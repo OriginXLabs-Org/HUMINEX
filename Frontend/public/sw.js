@@ -139,7 +139,11 @@ async function staleWhileRevalidate(request, cacheName) {
       cache.put(request, responseWithTimestamp);
     }
     return response;
-  }).catch(() => cached);
+  }).catch(() => cached ?? new Response('Offline - API unavailable', {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: { 'Content-Type': 'text/plain' }
+  }));
   
   // Return cached response immediately if available
   if (cached) {

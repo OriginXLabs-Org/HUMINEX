@@ -22,6 +22,8 @@ namespace Huminex.Api.Extensions;
 
 public static class ServiceCollectionExtensions
 {
+    private const string HuminexCorsPolicy = "HuminexCorsPolicy";
+
     public static IServiceCollection AddHuminexApi(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<PostgresOptions>(configuration.GetSection(PostgresOptions.SectionName));
@@ -54,6 +56,7 @@ public static class ServiceCollectionExtensions
         services.AddEndpointsApiExplorer();
         services.AddValidatorsFromAssemblyContaining<Program>();
         services.AddFeatureManagement();
+        ConfigureCors(services, configuration);
 
         services.AddApiVersioning(options =>
         {
@@ -170,6 +173,7 @@ public static class ServiceCollectionExtensions
         });
 
         app.UseHttpsRedirection();
+        app.UseCors(HuminexCorsPolicy);
         app.UseAuthentication();
         app.UseMiddleware<Huminex.Api.Middleware.TenantContextGuardMiddleware>();
         app.UseAuthorization();
@@ -184,5 +188,38 @@ public static class ServiceCollectionExtensions
         app.MapControllers();
 
         return app;
+    }
+
+    private static void ConfigureCors(IServiceCollection services, IConfiguration configuration)
+    {
+        var configuredOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+        var normalizedOrigins = configuredOrigins
+            .Select(origin => origin?.Trim())
+            .Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var fallbackOrigins = new[]
+        {
+            "https://www.gethuminex.com",
+            "https://gethuminex.com",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173"
+        };
+
+        var allowedOrigins = normalizedOrigins.Length > 0 ? normalizedOrigins : fallbackOrigins;
+
+        services.AddCors(options =>
+        {
+            options.AddPolicy(HuminexCorsPolicy, policy =>
+            {
+                policy.WithOrigins(allowedOrigins)
+                    .AllowAnyMethod()
+                    .AllowAnyHeader()
+                    .SetPreflightMaxAge(TimeSpan.FromHours(1));
+            });
+        });
     }
 }
