@@ -2,6 +2,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
+  - ../../observability/overlays/dev
+  - ../../ingress-internal/overlays/dev
 patches:
   - path: rollout-dev-patch.yaml
   - path: analysis-template-dev-patch.yaml

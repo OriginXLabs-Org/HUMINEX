@@ -17,6 +17,7 @@ using Microsoft.FeatureManagement;
 using Microsoft.OpenApi.Models;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 
 namespace Huminex.Api.Extensions;
 
@@ -149,6 +150,10 @@ public static class ServiceCollectionExtensions
         services.AddOpenTelemetry()
             .ConfigureResource(resource => resource.AddService(TelemetryConstants.ServiceName))
             .WithTracing(tracing => tracing
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddOtlpExporter())
+            .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
                 .AddOtlpExporter());

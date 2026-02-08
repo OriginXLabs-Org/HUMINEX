@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingress-nginx-internal-controller
+  namespace: ingress-nginx-internal
+  labels:
+    app.kubernetes.io/name: ingress-nginx-internal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-nginx-internal
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingress-nginx-internal
+    spec:
+      serviceAccountName: ingress-nginx-internal
+      containers:
+        - name: controller
+          image: registry.k8s.io/ingress-nginx/controller:v1.11.2
+          args:
+            - /nginx-ingress-controller
+            - --controller-class=k8s.io/ingress-nginx-internal
+            - --ingress-class=nginx-internal
+            - --watch-ingress-without-class=false
+            - --publish-service=$(POD_NAMESPACE)/ingress-nginx-internal-controller
+            - --election-id=ingress-nginx-internal-leader
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: http
+              containerPort: 80
+            - name: https
+              containerPort: 443
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 10254
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 10254
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+

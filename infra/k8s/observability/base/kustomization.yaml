@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - otel-collector-config.yaml
+  - otel-collector-deploy.yaml
+  - tempo-config.yaml
+  - tempo-deploy.yaml
+  - loki-config.yaml
+  - loki-deploy.yaml
+  - promtail-config.yaml
+  - promtail-daemonset.yaml
+  - prometheus-config.yaml
+  - prometheus-deploy.yaml
+  - grafana-datasources.yaml
+  - grafana-deploy.yaml
+  - ingress-internal.yaml
+
