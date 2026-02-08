@@ -114,6 +114,104 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task OrganizationEmployees_ShouldSucceed_WhenRoleDerivesOrgReadPermission()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/org/employees?page=1&pageSize=5");
+        request.Headers.Add("X-Tenant-Id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        request.Headers.Add("X-User-Id", "11111111-1111-1111-1111-111111111111");
+        request.Headers.Add("X-User-Email", "tenanta-hr@gethuminex.com");
+        request.Headers.Add("X-User-Role", "hr_manager");
+        // no X-User-Permissions header: permissions should be derived from role matrix
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PayrollRuns_ShouldSucceed_WhenRoleDerivesPayrollReadPermission()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/payroll/runs");
+        request.Headers.Add("X-Tenant-Id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        request.Headers.Add("X-User-Id", "11111111-1111-1111-1111-111111111111");
+        request.Headers.Add("X-User-Email", "tenanta-payroll@gethuminex.com");
+        request.Headers.Add("X-User-Role", "payroll_manager");
+        // no X-User-Permissions header: permissions should be derived from role matrix
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RbacRoles_ShouldSucceed_WhenAdminRoleAndNoPermissionHeaderProvided()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/rbac/roles");
+        request.Headers.Add("X-Tenant-Id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        request.Headers.Add("X-User-Id", "11111111-1111-1111-1111-111111111111");
+        request.Headers.Add("X-User-Email", "tenanta-admin@gethuminex.com");
+        request.Headers.Add("X-User-Role", "Admin"); // capital-A edge case
+        // no X-User-Permissions header: should be derived + admin bypass should apply
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnyApi_ShouldReturnBadRequest_WhenTenantContextMissing()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/org/employees?page=1&pageSize=5");
+        // Intentionally omit X-Tenant-Id
+        request.Headers.Add("X-User-Id", "11111111-1111-1111-1111-111111111111");
+        request.Headers.Add("X-User-Email", "tenanta-hr@gethuminex.com");
+        request.Headers.Add("X-User-Role", "hr_manager");
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("tenant_context_missing", document.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task AnyApi_ShouldReturnUnauthorized_WhenUserContextMissing()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/org/employees?page=1&pageSize=5");
+        request.Headers.Add("X-Tenant-Id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        // Intentionally omit X-User-Id and X-User-Email
+        request.Headers.Add("X-User-Role", "hr_manager");
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("identity_context_missing", document.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task UsersMe_ShouldReturnForbidden_WhenPermissionMissing()
     {
         if (_client is null)

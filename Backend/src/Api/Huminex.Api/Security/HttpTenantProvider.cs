@@ -27,27 +27,36 @@ public sealed class HttpTenantProvider(IHttpContextAccessor httpContextAccessor,
         var principal = httpContext.User;
         if (principal?.Identity?.IsAuthenticated is true)
         {
+            // For authenticated principals, do NOT fall back to a configured tenant/user identity.
+            // Missing tenant/user context should be treated as an invalid/unsupported token and rejected by middleware.
             var tenantId = TryReadGuidClaim(principal, "tenant_id")
                 ?? TryReadGuidClaim(principal, "tid")
                 ?? TryReadGuidHeader(httpContext, "X-Tenant-Id")
-                ?? TryParseGuid(_options.FallbackTenantId);
+                ?? Guid.Empty;
 
             var userId = TryReadGuidClaim(principal, "oid")
                 ?? TryReadGuidClaim(principal, ClaimTypes.NameIdentifier)
                 ?? TryReadGuidClaim(principal, "sub")
                 ?? TryReadGuidHeader(httpContext, "X-User-Id")
-                ?? TryParseGuid(_options.FallbackUserId);
+                ?? Guid.Empty;
 
             var email = principal.FindFirstValue(ClaimTypes.Email)
                 ?? principal.FindFirstValue("emails")
                 ?? principal.FindFirstValue("preferred_username")
                 ?? httpContext.Request.Headers["X-User-Email"].FirstOrDefault()
-                ?? _options.FallbackUserEmail;
+                ?? string.Empty;
 
-            var role = principal.FindFirstValue(ClaimTypes.Role)
-                ?? principal.FindFirstValue("roles")
-                ?? httpContext.Request.Headers["X-User-Role"].FirstOrDefault()
-                ?? _options.FallbackRole;
+            var roles = principal.FindAll(ClaimTypes.Role).Select(x => x.Value)
+                .Concat(principal.FindAll("roles").Select(x => x.Value))
+                .Concat(new[] { httpContext.Request.Headers["X-User-Role"].FirstOrDefault() ?? string.Empty })
+                .Select(x => (x ?? string.Empty).Trim())
+                .Where(x => x.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var role = RolePermissionMatrix.IsAdmin(roles)
+                ? "admin"
+                : roles.FirstOrDefault() ?? string.Empty;
 
             var permissions = principal.FindAll("permissions").Select(x => x.Value)
                 .Concat(principal.FindAll("permission").Select(x => x.Value))
@@ -60,7 +69,7 @@ public sealed class HttpTenantProvider(IHttpContextAccessor httpContextAccessor,
                 userId,
                 email,
                 role,
-                permissions.Length == 0 ? _options.FallbackPermissions : permissions,
+                permissions.Length == 0 ? RolePermissionMatrix.ResolvePermissions(roles) : permissions,
                 true);
         }
 
