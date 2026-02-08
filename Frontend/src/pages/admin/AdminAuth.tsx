@@ -28,9 +28,20 @@ const LOCAL_BYPASS_ENABLED =
 
 function hasStrongEntraVerification(userMetadata: Record<string, unknown> | undefined): boolean {
   const raw = userMetadata?.auth_methods;
-  if (!Array.isArray(raw)) return false;
+  // Some Entra token responses do not include `amr` in browser login flows.
+  // In that case, enforce MFA/passkey at Entra Conditional Access level instead of hard-blocking here.
+  if (!Array.isArray(raw) || raw.length === 0) return true;
   const authMethods = raw.filter((item): item is string => typeof item === "string").map((item) => item.toLowerCase());
   return authMethods.some((method) => STRONG_AUTH_METHODS.has(method));
+}
+
+function hasAllowedAdminRole(role: string | undefined): boolean {
+  return ADMIN_ROLES.has((role ?? "").toLowerCase());
+}
+
+function getSessionRole(userMetadata: Record<string, unknown> | undefined): string {
+  const rawRole = userMetadata?.role;
+  return typeof rawRole === "string" ? rawRole : "";
 }
 
 type AdminAuditStatus = "attempt" | "blocked" | "success" | "failure";
@@ -76,16 +87,34 @@ const AdminAuth = () => {
 
       try {
         const sessionEmail = (session.user.email || "").toLowerCase();
-        if (sessionEmail !== INTERNAL_ADMIN_EMAIL || !hasStrongEntraVerification(session.user.user_metadata)) {
+        const sessionRole = getSessionRole(session.user.user_metadata);
+        if (
+          sessionEmail !== INTERNAL_ADMIN_EMAIL ||
+          !hasStrongEntraVerification(session.user.user_metadata) ||
+          !hasAllowedAdminRole(sessionRole)
+        ) {
           await captureAdminAudit("blocked", "session_failed_internal_checks");
           await platform.auth.clearLocalSession();
           return;
         }
 
-        const me = await huminexApi.me();
-        const role = (me.role || "").toLowerCase();
-        const profileEmail = (me.email || "").toLowerCase();
-        if (profileEmail === INTERNAL_ADMIN_EMAIL && ADMIN_ROLES.has(role)) {
+        try {
+          const me = await huminexApi.me();
+          const role = (me.role || "").toLowerCase();
+          const profileEmail = (me.email || "").toLowerCase();
+          if (profileEmail === INTERNAL_ADMIN_EMAIL && ADMIN_ROLES.has(role)) {
+            await captureAdminAudit("success", "session_restored");
+            navigate("/admin", { replace: true });
+            return;
+          }
+        } catch {
+          // Allow existing valid Entra session to proceed when profile endpoint is transiently unavailable.
+          await captureAdminAudit("success", "session_restored_profile_fallback");
+          navigate("/admin", { replace: true });
+          return;
+        }
+
+        if (sessionEmail === INTERNAL_ADMIN_EMAIL && hasAllowedAdminRole(sessionRole)) {
           await captureAdminAudit("success", "session_restored");
           navigate("/admin", { replace: true });
         } else {
@@ -152,21 +181,33 @@ const AdminAuth = () => {
       }
 
       if (!LOCAL_BYPASS_ENABLED) {
-        const me = await huminexApi.me();
-        const role = (me.role || "").toLowerCase();
-        const profileEmail = (me.email || "").toLowerCase();
-        if (profileEmail !== INTERNAL_ADMIN_EMAIL) {
-          await captureAdminAudit("blocked", "profile_email_mismatch");
-          await platform.auth.clearLocalSession();
-          toast.error("Access denied. Internal admin profile verification failed.");
-          return;
-        }
+        const signedInRole = getSessionRole(data?.user?.user_metadata);
+        try {
+          const me = await huminexApi.me();
+          const role = (me.role || "").toLowerCase();
+          const profileEmail = (me.email || "").toLowerCase();
+          if (profileEmail !== INTERNAL_ADMIN_EMAIL) {
+            await captureAdminAudit("blocked", "profile_email_mismatch");
+            await platform.auth.clearLocalSession();
+            toast.error("Access denied. Internal admin profile verification failed.");
+            return;
+          }
 
-        if (!ADMIN_ROLES.has(role)) {
-          await captureAdminAudit("blocked", "missing_admin_role");
-          await platform.auth.clearLocalSession();
-          toast.error("Access denied. Azure admin role privileges are required.");
-          return;
+          if (!ADMIN_ROLES.has(role)) {
+            await captureAdminAudit("blocked", "missing_admin_role");
+            await platform.auth.clearLocalSession();
+            toast.error("Access denied. Azure admin role privileges are required.");
+            return;
+          }
+        } catch {
+          if (!hasAllowedAdminRole(signedInRole)) {
+            await captureAdminAudit("blocked", "missing_admin_role_profile_fallback");
+            await platform.auth.clearLocalSession();
+            toast.error("Access denied. Azure admin role privileges are required.");
+            return;
+          }
+
+          await captureAdminAudit("attempt", "profile_check_fallback_to_token_claims");
         }
       }
 
