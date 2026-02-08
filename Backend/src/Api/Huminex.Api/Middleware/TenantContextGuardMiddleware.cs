@@ -7,7 +7,6 @@ public sealed class TenantContextGuardMiddleware(RequestDelegate next)
     public async Task InvokeAsync(HttpContext context, ITenantProvider tenantProvider)
     {
         if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
-            && !context.Request.Path.StartsWithSegments("/api/v1/auth", StringComparison.OrdinalIgnoreCase)
             && !context.Request.Path.StartsWithSegments("/api/v1/system/health", StringComparison.OrdinalIgnoreCase)
             && !context.Request.Path.StartsWithSegments("/health/live", StringComparison.OrdinalIgnoreCase)
             && !context.Request.Path.StartsWithSegments("/health/ready", StringComparison.OrdinalIgnoreCase)

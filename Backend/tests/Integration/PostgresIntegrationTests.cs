@@ -158,28 +158,6 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AuthLogin_ShouldReturnTokenEnvelope()
-    {
-        if (_client is null)
-        {
-            return;
-        }
-
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new
-        {
-            email = "admin@gethuminex.com",
-            password = "demo"
-        });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var data = document.RootElement.GetProperty("data");
-        Assert.False(string.IsNullOrWhiteSpace(data.GetProperty("accessToken").GetString()));
-        Assert.False(string.IsNullOrWhiteSpace(data.GetProperty("refreshToken").GetString()));
-    }
-
-    [Fact]
     public async Task PayrollApprove_ShouldRequireIdempotencyHeader()
     {
         if (_client is null)

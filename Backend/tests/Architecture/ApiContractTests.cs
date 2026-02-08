@@ -38,9 +38,6 @@ public class ApiContractTests
 
         var expected = new[]
         {
-            "POST /api/v1/auth/login",
-            "POST /api/v1/auth/refresh",
-            "POST /api/v1/auth/logout",
             "GET /api/v1/users/me",
             "PUT /api/v1/users/{id:guid}/roles",
             "GET /api/v1/rbac/policies",

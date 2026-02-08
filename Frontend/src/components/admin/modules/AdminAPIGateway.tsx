@@ -21,7 +21,7 @@ const requestData = [
 const endpoints = [
   { path: "/api/v1/users", method: "GET", calls: 45200, avgLatency: 42, status: "healthy", rateLimit: 1000 },
   { path: "/api/v1/tenants", method: "GET", calls: 32100, avgLatency: 38, status: "healthy", rateLimit: 500 },
-  { path: "/api/v1/auth/login", method: "POST", calls: 28500, avgLatency: 125, status: "healthy", rateLimit: 100 },
+  { path: "/api/v1/users/me", method: "GET", calls: 28500, avgLatency: 65, status: "healthy", rateLimit: 300 },
   { path: "/api/v1/invoices", method: "GET", calls: 18400, avgLatency: 65, status: "warning", rateLimit: 500 },
   { path: "/api/v1/projects", method: "GET", calls: 15600, avgLatency: 52, status: "healthy", rateLimit: 500 },
   { path: "/api/v1/ai/chat", method: "POST", calls: 12300, avgLatency: 850, status: "healthy", rateLimit: 50 },
@@ -35,7 +35,7 @@ const apiKeys = [
 ];
 
 const rateLimitData = [
-  { endpoint: "/api/v1/auth", limit: 100, current: 78, color: "#F59E0B" },
+  { endpoint: "/api/v1/users", limit: 300, current: 178, color: "#F59E0B" },
   { endpoint: "/api/v1/users", limit: 1000, current: 452, color: "#10B981" },
   { endpoint: "/api/v1/ai", limit: 50, current: 48, color: "#EF4444" },
   { endpoint: "/api/v1/files", limit: 200, current: 120, color: "#3B82F6" },

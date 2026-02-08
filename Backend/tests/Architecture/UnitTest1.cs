@@ -16,7 +16,6 @@ public class UnitTest1
 
         var expected = new[]
         {
-            "AuthController",
             "UsersController",
             "RbacController",
             "OrganizationController",

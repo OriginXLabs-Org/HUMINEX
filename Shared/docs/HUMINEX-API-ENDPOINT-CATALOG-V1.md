@@ -4,9 +4,6 @@ Base URL: `/api/v1`
 
 ## Identity & RBAC
 
-- `POST /auth/login`
-- `POST /auth/refresh`
-- `POST /auth/logout`
 - `GET /users/me`
 - `PUT /users/{id}/roles`
 - `GET /rbac/policies`

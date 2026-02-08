@@ -10,12 +10,6 @@ export type ApiErrorEnvelope = {
   validationErrors?: Record<string, string[]>;
 };
 
-export type LoginResponse = {
-  accessToken: string;
-  refreshToken: string;
-  expiresAtUtc: string;
-};
-
 export type UserProfileResponse = {
   userId: string;
   tenantId: string;
@@ -152,21 +146,6 @@ export async function apiRequest<TResponse>(
 
 export const huminexApi = {
   health: () => apiRequest<{ service: string; status: string; utcTime: string }>("/system/health"),
-  login: (email: string, password: string) =>
-    apiRequest<LoginResponse>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
-  refresh: (refreshToken: string) =>
-    apiRequest<LoginResponse>("/auth/refresh", {
-      method: "POST",
-      body: JSON.stringify({ refreshToken }),
-    }),
-  logout: (refreshToken: string, accessToken?: string) =>
-    apiRequest<void>("/auth/logout", {
-      method: "POST",
-      body: JSON.stringify({ refreshToken }),
-    }, accessToken),
   me: (accessToken?: string) => apiRequest<UserProfileResponse>("/users/me", {}, accessToken),
   updateUserRoles: (id: string, roles: string[], accessToken?: string) =>
     apiRequest<void>(`/users/${id}/roles`, {

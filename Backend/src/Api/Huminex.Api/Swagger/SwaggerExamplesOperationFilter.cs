@@ -11,15 +11,6 @@ public sealed class SwaggerExamplesOperationFilter : IOperationFilter
         var route = context.ApiDescription.RelativePath?.ToLowerInvariant() ?? string.Empty;
         var method = context.ApiDescription.HttpMethod?.ToUpperInvariant() ?? string.Empty;
 
-        if (method == "POST" && route.Contains("auth/login"))
-        {
-            AddRequestExample(operation, "application/json", new OpenApiObject
-            {
-                ["email"] = new OpenApiString("admin@gethuminex.com"),
-                ["password"] = new OpenApiString("StrongPassword!123")
-            });
-        }
-
         if (method == "PUT" && route.Contains("users/") && route.Contains("/roles"))
         {
             AddRequestExample(operation, "application/json", new OpenApiObject

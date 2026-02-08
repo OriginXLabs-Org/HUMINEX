@@ -209,9 +209,7 @@ This document is the execution planner for moving HUMINEX from current frontend-
 
 ### Identity & Access
 
-- [x] `POST /api/v1/auth/login`
-- [x] `POST /api/v1/auth/refresh`
-- [x] `POST /api/v1/auth/logout`
+- [x] Removed legacy `/api/v1/auth/*` endpoints; Microsoft Entra ID is the only auth token issuer.
 - [x] `GET /api/v1/users/me`
 - [ ] `PATCH /api/v1/users/me`
 - [ ] `GET /api/v1/roles`

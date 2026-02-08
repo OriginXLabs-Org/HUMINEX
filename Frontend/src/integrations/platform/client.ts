@@ -181,19 +181,10 @@ const auth = {
     return this.signInWithPassword({ email: payload.email, password: payload.password });
   },
   async signOut() {
-    const session = readStoredSession();
     try {
       await logoutMicrosoft();
     } catch {
       // Ignore popup cancel errors.
-    }
-
-    if (session?.refresh_token) {
-      try {
-        await huminexApi.logout(session.refresh_token, session.access_token);
-      } catch {
-        // API logout is best-effort.
-      }
     }
     saveStoredSession(null);
     notify("SIGNED_OUT", null);

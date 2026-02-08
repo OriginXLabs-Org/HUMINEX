@@ -81,7 +81,7 @@ public static class ServiceCollectionExtensions
             options.TagActionsBy(apiDescription =>
             {
                 var relativePath = apiDescription.RelativePath?.ToLowerInvariant() ?? string.Empty;
-                if (relativePath.Contains("/auth") || relativePath.Contains("/users") || relativePath.Contains("/rbac"))
+                if (relativePath.Contains("/users") || relativePath.Contains("/rbac"))
                 {
                     return ["Identity & Access"];
                 }
