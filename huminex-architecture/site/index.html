@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HUMINEX Engineering Architecture</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    </script>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="brand">
+          HUMINEX Architecture
+          <small>Engineering Source of Truth</small>
+        </div>
+        <nav class="nav">
+          <a href="#overview">Executive Overview</a>
+          <a href="#hld">HLD Diagram</a>
+          <a href="#cicd">CI/CD Diagram</a>
+          <a href="#azure">Azure Diagram</a>
+          <a href="#techstack">Tech Stack + Libraries</a>
+          <a href="#services">Azure Services Inventory</a>
+          <a href="#modules">15 Modules Tracker</a>
+          <a href="#runbooks">Runbooks + Governance</a>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <section class="header" id="overview">
+          <h1>HUMINEX Engineering Architecture</h1>
+          <p>Mintlify-style architecture portal covering platform topology, CI/CD, Azure services, module delivery status, and operational controls.</p>
+          <div class="kpis">
+            <div class="kpi"><div class="label">Runtime</div><div class="value">AKS + Argo CD</div></div>
+            <div class="kpi"><div class="label">Core Backend</div><div class="value">.NET 8 API</div></div>
+            <div class="kpi"><div class="label">Frontend</div><div class="value">React + Vite</div></div>
+            <div class="kpi"><div class="label">Cloud</div><div class="value">Azure-native</div></div>
+          </div>
+        </section>
+
+        <section class="section" id="hld">
+          <h2>HUMINEX HLD Diagram</h2>
+          <div class="mermaid">
+flowchart LR
+  U[Users\nEmployer, Employee, Internal Admin] --> W[Frontend Web\nReact + Vite + MSAL]
+  W --> I[NGINX Ingress\napi.gethuminex.com]
+  I --> A[HUMINEX API\n.NET 8]
+  A --> P[(Azure PostgreSQL)]
+  A --> R[(Redis)]
+  A --> S[(Service Bus)]
+  A --> B[(Blob Storage)]
+  A --> K[Key Vault]
+  A --> C[App Configuration]
+  A --> OT[OpenTelemetry + Serilog]
+  OT --> LAW[Log Analytics]
+  OT --> APPI[Application Insights]
+  LAW --> MON[Azure Monitor Alerts]
+  MON --> LA[Logic App -> Slack]
+          </div>
+        </section>
+
+        <section class="section" id="cicd">
+          <h2>CI/CD and GitOps Diagram</h2>
+          <div class="mermaid">
+flowchart LR
+  DEV[Commit to main] --> GHA[GitHub Actions]
+  GHA --> BCI[Backend CI]
+  GHA --> FCI[Frontend CI]
+  GHA --> E2E[E2E Playwright]
+  GHA --> IMG[Build+Push Image to ACR]
+  IMG --> TAG[Update GitOps tag]
+  TAG --> ARGO[Argo CD Sync]
+  ARGO --> ROL[Argo Rollouts Canary]
+  ROL --> AKS[AKS Runtime]
+  GHA --> SLACK[Slack Status Workflows]
+          </div>
+          <p><span class="tag">Workflows</span> <code class="inline">backend-ci.yml</code> <code class="inline">frontend-ci.yml</code> <code class="inline">e2e-playwright.yml</code> <code class="inline">backend-image-push.yml</code> <code class="inline">codeql.yml</code> <code class="inline">infra-deploy.yml</code></p>
+        </section>
+
+        <section class="section" id="azure">
+          <h2>Azure Deployment Diagram</h2>
+          <div class="mermaid">
+flowchart TD
+  SUB[Subscription] --> RG[rg-huminex]
+  RG --> AKS[huminex-dev-aks]
+  RG --> ACR[huminexdevacrohx5ka]
+  RG --> PG[huminex-dev-psql-ohx5karb]
+  RG --> STO[huminexdevstohx5karb]
+  RG --> SB[huminex-dev-sb-ohx5karb]
+  RG --> KV[kv-huminex]
+  RG --> APPCFG[huminex-dev-appcfg-ohx5ka]
+  RG --> LAW[huminex-dev-law]
+  RG --> APPI[huminex-dev-appi]
+  RG --> WB[HUMINEX Workbook]
+  RG --> LOGIC[huminex-dev-alert-relay-la]
+  LAW --> ALERTS[Metric + KQL Alerts]
+  ALERTS --> LOGIC
+          </div>
+        </section>
+
+        <section class="section" id="techstack">
+          <h2>Tech Stack and Library Versions</h2>
+          <div class="grid-2">
+            <div>
+              <h3>Frontend</h3>
+              <table>
+                <tr><th>Library</th><th>Version</th></tr>
+                <tr><td>React</td><td>18.3.1</td></tr>
+                <tr><td>TypeScript</td><td>5.8.3</td></tr>
+                <tr><td>Vite</td><td>5.4.19</td></tr>
+                <tr><td>Tailwind CSS</td><td>3.4.17</td></tr>
+                <tr><td>MSAL Browser</td><td>5.1.0</td></tr>
+                <tr><td>TanStack Query</td><td>5.83.0</td></tr>
+                <tr><td>React Router</td><td>6.30.1</td></tr>
+                <tr><td>Vitest</td><td>2.1.9</td></tr>
+              </table>
+            </div>
+            <div>
+              <h3>Backend</h3>
+              <table>
+                <tr><th>Library</th><th>Version</th></tr>
+                <tr><td>.NET</td><td>8.0</td></tr>
+                <tr><td>EF Core</td><td>8.0.4</td></tr>
+                <tr><td>Npgsql EF Provider</td><td>8.0.4</td></tr>
+                <tr><td>Asp.Versioning</td><td>8.1.0</td></tr>
+                <tr><td>Microsoft.Identity.Web</td><td>2.21.0</td></tr>
+                <tr><td>OpenTelemetry</td><td>1.9.0</td></tr>
+                <tr><td>Serilog.AspNetCore</td><td>8.0.2</td></tr>
+                <tr><td>Swashbuckle</td><td>6.6.2</td></tr>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="services">
+          <h2>Azure Services Inventory</h2>
+          <table>
+            <tr><th>Service</th><th>Resource Name</th><th>Purpose</th></tr>
+            <tr><td>AKS</td><td>huminex-dev-aks</td><td>Primary workload runtime for API, ingress, rollouts</td></tr>
+            <tr><td>ACR</td><td>huminexdevacrohx5ka</td><td>Container image registry</td></tr>
+            <tr><td>PostgreSQL</td><td>huminex-dev-psql-ohx5karb</td><td>Transactional data store</td></tr>
+            <tr><td>Storage</td><td>huminexdevstohx5karb</td><td>Blob documents and files</td></tr>
+            <tr><td>Service Bus</td><td>huminex-dev-sb-ohx5karb</td><td>Asynchronous business events</td></tr>
+            <tr><td>Key Vault</td><td>kv-huminex</td><td>Secrets and key management</td></tr>
+            <tr><td>App Config</td><td>huminex-dev-appcfg-ohx5ka</td><td>Feature flags and dynamic config</td></tr>
+            <tr><td>Log Analytics</td><td>huminex-dev-law</td><td>Centralized logs and KQL</td></tr>
+            <tr><td>App Insights</td><td>huminex-dev-appi</td><td>APM and request telemetry</td></tr>
+            <tr><td>Logic App</td><td>huminex-dev-alert-relay-la</td><td>Slack alert relay</td></tr>
+            <tr><td>Workbook</td><td>HUMINEX</td><td>Unified observability dashboard</td></tr>
+          </table>
+        </section>
+
+        <section class="section" id="modules">
+          <h2>HUMINEX 15 Modules Tracker</h2>
+          <table>
+            <tr><th>Module</th><th>Status</th><th>Notes</th></tr>
+            <tr><td>Identity & Access</td><td>In Progress</td><td>Core RBAC + policy APIs implemented; hardening ongoing</td></tr>
+            <tr><td>Workforce Management</td><td>In Progress</td><td>Tenant employees moved to API-driven role/access updates</td></tr>
+            <tr><td>Attendance & Leave OS</td><td>Pending</td><td>Needs full backend and UI integration</td></tr>
+            <tr><td>Payroll Engine</td><td>Partial</td><td>Run/payslip APIs present, full workflow pending</td></tr>
+            <tr><td>Recruitment & ATS</td><td>Pending</td><td>UI still contains static boards</td></tr>
+            <tr><td>Projects & Tasks</td><td>Pending</td><td>Backend entity model pending</td></tr>
+            <tr><td>Finance & Expense</td><td>Pending</td><td>Needs claim + approval workflow implementation</td></tr>
+            <tr><td>Compliance & Risk</td><td>Pending</td><td>Risk registry and policy acknowledgment pending</td></tr>
+            <tr><td>Assets & EMS</td><td>Pending</td><td>Inventory/maintenance workflows pending</td></tr>
+            <tr><td>BGV Suite</td><td>Pending</td><td>Case lifecycle + adapter integration pending</td></tr>
+            <tr><td>Performance Management</td><td>Pending</td><td>Goal/review cycles pending</td></tr>
+            <tr><td>Announcements & Docs</td><td>Pending</td><td>Publish/acknowledge APIs pending</td></tr>
+            <tr><td>Proxima AI</td><td>Pending</td><td>Usage telemetry and model governance pending</td></tr>
+            <tr><td>OpZenix Automation</td><td>Pending</td><td>Workflow runtime and run logs pending</td></tr>
+            <tr><td>Governance Layer</td><td>Pending</td><td>Retention + attestation workflows pending</td></tr>
+          </table>
+        </section>
+
+        <section class="section" id="runbooks">
+          <h2>Runbooks and Governance</h2>
+          <p>Primary infra runbooks in repo:</p>
+          <ul>
+            <li><code class="inline">infra/azure/scripts/deploy-workbook.sh</code></li>
+            <li><code class="inline">infra/azure/scripts/deploy-alerting.sh</code></li>
+            <li><code class="inline">infra/azure/scripts/verify-observability-auth.sh</code></li>
+            <li><code class="inline">infra/azure/scripts/verify-huminex.sh</code></li>
+            <li><code class="inline">infra/argocd/argocd-server-ingress.yaml</code></li>
+          </ul>
+          <p>Operational policy: this portal is internal engineering source-of-truth and must be updated with each architecture change.</p>
+        </section>
+
+        <div class="footer">
+          <span id="versionLine">Version: loading...</span>
+          <span>HUMINEX Engineering Documentation</span>
+          <span id="releasedLine">Released: loading...</span>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      fetch('./version.json')
+        .then((response) => response.json())
+        .then((versionInfo) => {
+          const version = versionInfo.version || '0.0.0';
+          const releasedAt = versionInfo.releasedAtUtc || 'unknown';
+          document.getElementById('versionLine').textContent = `Version: ${version}`;
+          document.getElementById('releasedLine').textContent = `Released: ${releasedAt}`;
+        })
+        .catch(() => {
+          document.getElementById('versionLine').textContent = 'Version: unavailable';
+          document.getElementById('releasedLine').textContent = 'Released: unavailable';
+        });
+    </script>
+  </body>
+</html>

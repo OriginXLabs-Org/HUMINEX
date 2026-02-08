@@ -1,0 +1,26 @@
+---
+title: Azure Services Inventory
+---
+
+# Azure Services Inventory (rg-huminex)
+
+## Core services
+
+- AKS: `huminex-dev-aks`
+- ACR: `huminexdevacrohx5ka`
+- PostgreSQL Flexible Server: `huminex-dev-psql-ohx5karb`
+- Storage Account: `huminexdevstohx5karb`
+- Service Bus: `huminex-dev-sb-ohx5karb`
+- Key Vault: `kv-huminex`
+- App Configuration: `huminex-dev-appcfg-ohx5ka`
+- Log Analytics Workspace: `huminex-dev-law`
+- Application Insights: `huminex-dev-appi`
+- Logic App Alert Relay: `huminex-dev-alert-relay-la`
+- Workbook: `HUMINEX`
+
+## Monitoring and alerts
+
+- Azure Monitor metric alerts
+- Scheduled query alerts (AKS, app, security, FinOps)
+- Action Groups (`critical`, `warning`)
+- Slack relay integration via Logic App

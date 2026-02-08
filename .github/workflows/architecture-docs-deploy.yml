@@ -1,0 +1,109 @@
+name: HUMINEX Architecture Docs Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: "Semantic version bump type"
+        required: false
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+  push:
+    branches: [main]
+    paths:
+      - 'huminex-architecture/**'
+      - 'infra/azure/scripts/deploy-architecture-docs.sh'
+      - '.github/workflows/architecture-docs-deploy.yml'
+
+jobs:
+  bump-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version bump type
+        id: bump
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "type=${{ inputs.version_bump }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip bump for bot auto-version commit
+        id: skip_bump
+        run: |
+          msg="${{ github.event.head_commit.message || '' }}"
+          if [[ "${{ github.actor }}" == "github-actions[bot]" ]] && [[ "$msg" == chore(docs-version):* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump docs semantic version
+        if: steps.skip_bump.outputs.skip != 'true'
+        run: |
+          file="huminex-architecture/version.json"
+          current="$(jq -r '.version' "$file")"
+          major="${current%%.*}"
+          rest="${current#*.}"
+          minor="${rest%%.*}"
+          patch="${current##*.}"
+
+          bump="${{ steps.bump.outputs.type }}"
+          case "$bump" in
+            major)
+              major=$((major + 1)); minor=0; patch=0 ;;
+            minor)
+              minor=$((minor + 1)); patch=0 ;;
+            *)
+              patch=$((patch + 1)) ;;
+          esac
+
+          new_version="${major}.${minor}.${patch}"
+          released_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          jq --arg v "$new_version" --arg t "$released_at" '.version = $v | .releasedAtUtc = $t' "$file" > "${file}.tmp"
+          mv "${file}.tmp" "$file"
+          cp "$file" huminex-architecture/site/version.json
+
+      - name: Commit version update
+        if: steps.skip_bump.outputs.skip != 'true'
+        run: |
+          if git diff --quiet -- huminex-architecture/version.json huminex-architecture/site/version.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add huminex-architecture/version.json huminex-architecture/site/version.json
+          git commit -m "chore(docs-version): bump architecture docs version"
+          git push origin HEAD:main
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: >-
+            {"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}
+
+      - name: Deploy HUMINEX architecture docs to Azure
+        run: |
+          bash infra/azure/scripts/deploy-architecture-docs.sh
+
+      - name: Publish docs URL to workflow summary
+        run: |
+          ACCOUNT="$(az storage account list -g rg-huminex --query "[?tags.app=='huminex' && tags.purpose=='engineering-docs'].name | [0]" -o tsv)"
+          URL="$(az storage account show -n "$ACCOUNT" -g rg-huminex --query "primaryEndpoints.web" -o tsv)"
+          VERSION="$(jq -r '.version' huminex-architecture/version.json)"
+          echo "## HUMINEX Architecture Docs" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version: \\`$VERSION\\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL: $URL" >> "$GITHUB_STEP_SUMMARY"

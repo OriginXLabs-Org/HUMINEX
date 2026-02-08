@@ -109,3 +109,17 @@ Check API health via ingress / service:
 curl -f https://api.gethuminex.com/health/live
 curl -f https://api.gethuminex.com/health/ready
 ```
+
+## HUMINEX Engineering Architecture Docs
+
+Primary docs source:
+- `huminex-architecture/`
+
+Deploy to Azure DNS-less endpoint:
+
+```bash
+bash infra/azure/scripts/deploy-architecture-docs.sh
+```
+
+Automation workflow:
+- `.github/workflows/architecture-docs-deploy.yml`

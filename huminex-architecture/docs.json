@@ -1,0 +1,45 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "HUMINEX Engineering Architecture",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "theme": "mint",
+  "colors": {
+    "primary": "#0B6E4F",
+    "light": "#EAF7F1",
+    "dark": "#083D2E"
+  },
+  "navigation": [
+    {
+      "group": "Overview",
+      "pages": [
+        "introduction"
+      ]
+    },
+    {
+      "group": "Architecture",
+      "pages": [
+        "architecture/hld",
+        "architecture/azure-topology",
+        "architecture/ci-cd"
+      ]
+    },
+    {
+      "group": "Platforms",
+      "pages": [
+        "platforms/tech-stack",
+        "platforms/services-inventory"
+      ]
+    },
+    {
+      "group": "Operations",
+      "pages": [
+        "operations/release-versioning",
+        "operations/source-of-truth"
+      ]
+    }
+  ]
+}

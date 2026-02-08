@@ -1,0 +1,20 @@
+---
+title: HUMINEX Engineering Architecture
+---
+
+# HUMINEX Engineering Architecture
+
+This documentation is the engineering source of truth for:
+
+- System architecture and HLD
+- CI/CD and GitOps delivery
+- Azure services inventory and ownership
+- Runtime operations and release versioning
+
+## Program Baseline (as of 2026-02-08)
+
+- Runtime platform: AKS + Argo Rollouts + NGINX ingress
+- Backend: .NET 8 Web API + EF Core + PostgreSQL + Redis
+- Frontend: React + TypeScript + Vite + MSAL (Microsoft Entra)
+- GitOps: Argo CD app `huminex-platform-dev`
+- Observability: Azure Monitor, Log Analytics, Application Insights, Workbook

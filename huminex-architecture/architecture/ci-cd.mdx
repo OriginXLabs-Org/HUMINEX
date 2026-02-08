@@ -1,0 +1,33 @@
+---
+title: CI/CD and GitOps
+---
+
+# CI/CD and GitOps Delivery
+
+```mermaid
+flowchart LR
+  DEV[Developer Push -> main] --> GHA[GitHub Actions]
+  GHA --> BCI[Backend CI]
+  GHA --> FCI[Frontend CI]
+  GHA --> E2E[E2E Playwright]
+  GHA --> IMG[Backend Image Push -> ACR]
+
+  IMG --> GITOPS[Update kustomization newTag]
+  GITOPS --> ARGO[Argo CD\nhuminex-platform-dev]
+  ARGO --> AKS[AKS Rollout]
+  AKS --> VERIFY[Health/Smoke Verification]
+
+  GHA --> SLACK[Pipeline Status to Slack]
+```
+
+## Current workflow files
+
+- `.github/workflows/backend-ci.yml`
+- `.github/workflows/frontend-ci.yml`
+- `.github/workflows/e2e-playwright.yml`
+- `.github/workflows/backend-image-push.yml`
+- `.github/workflows/codeql.yml`
+- `.github/workflows/infra-deploy.yml`
+- `.github/workflows/openhuman-backend-ci.yml`
+- `.github/workflows/pipeline-status-slack.yml`
+- `.github/workflows/project-overview-slack.yml`
