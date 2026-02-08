@@ -28,6 +28,9 @@ import { ForgotPasswordModal } from "@/components/auth/ForgotPasswordModal";
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid work email address"),
 });
+const PORTAL_REDIRECT_URI =
+  (import.meta.env.VITE_AZURE_AD_PORTAL_REDIRECT_URI as string | undefined)
+  ?? window.location.origin + "/portal/login";
 
 const PortalAuth = () => {
   const [loading, setLoading] = useState(false);
@@ -76,6 +79,8 @@ const PortalAuth = () => {
       const { error } = await platform.auth.signInWithPassword({
         email: validated.email,
         password: "microsoft-entra",
+        portal: "default",
+        redirectUri: PORTAL_REDIRECT_URI,
       });
 
       if (error) {

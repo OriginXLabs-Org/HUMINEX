@@ -35,8 +35,8 @@ function resolveLoginModeForPortal(portal: "admin" | "tenant" | "default"): "pop
     return "redirect";
   }
 
-  if (typeof window !== "undefined" && HOSTED_DOMAIN_PATTERN.test(window.location.hostname) && portal === "admin") {
-    // Hosted internal admin auth is more reliable with redirect than popup transport.
+  if (typeof window !== "undefined" && HOSTED_DOMAIN_PATTERN.test(window.location.hostname)) {
+    // Hosted Entra auth is more reliable with redirect than popup transport.
     return "redirect";
   }
 
