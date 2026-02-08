@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - clusterissuer-letsencrypt-prod.yaml
   - namespace.yaml
+  - rbac-api-pod-reader.yaml
   - configmap.yaml
   - secret-provider-class.yaml
   - service.yaml

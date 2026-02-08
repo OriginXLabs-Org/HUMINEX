@@ -1,13 +1,16 @@
 using Asp.Versioning;
 using Huminex.Api.Configuration;
+using Huminex.Api.Services;
 using Huminex.BuildingBlocks.Contracts.Api;
 using Huminex.BuildingBlocks.Contracts.Auth;
 using Huminex.BuildingBlocks.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using System.Text.RegularExpressions;
 
 namespace Huminex.Api.Controllers;
 
@@ -20,9 +23,13 @@ public sealed class InternalAdminController(
     ITenantProvider tenantProvider,
     IOptions<InternalAdminOptions> internalAdminOptions,
     IConfiguration configuration,
-    HealthCheckService healthCheckService) : ControllerBase
+    HealthCheckService healthCheckService,
+    KubernetesPodStatusService kubernetesPodStatusService,
+    IApiDescriptionGroupCollectionProvider apiDescriptionGroupCollectionProvider,
+    IEndpointRequestMetricsStore endpointRequestMetricsStore) : ControllerBase
 {
     private static readonly string[] AdminRoleNames = ["admin", "super_admin", "director"];
+    private static readonly Regex RouteConstraintRegex = new(@"\{([^}:]+):[^}]+\}", RegexOptions.Compiled);
 
     [HttpGet("summary")]
     [ProducesResponseType(typeof(ApiEnvelope<InternalAdminSummaryResponse>), StatusCodes.Status200OK)]
@@ -1349,6 +1356,35 @@ public sealed class InternalAdminController(
             "namespace",
             azureOptions.AksNamespace));
 
+        var pods = await kubernetesPodStatusService.GetPodsAsync(cancellationToken);
+        if (pods.IsAvailable)
+        {
+            foreach (var pod in pods.Pods)
+            {
+                checks.Add(new InternalSystemHealthCheckResponse(
+                    $"AKS Pod {pod.Name}",
+                    pod.Status,
+                    "n/a",
+                    $"Phase: {pod.Phase}; Ready: {(pod.Ready ? "yes" : "no")}; Restarts: {pod.RestartCount}; Reason: {(string.IsNullOrWhiteSpace(pod.Reason) ? "n/a" : pod.Reason)}",
+                    "aks-pod",
+                    BuildAksPodsPortalUrl(azureOptions),
+                    "pod",
+                    pod.Name));
+            }
+        }
+        else
+        {
+            checks.Add(new InternalSystemHealthCheckResponse(
+                "AKS Pod Inventory",
+                "unknown",
+                "n/a",
+                pods.Message,
+                "aks-pod",
+                BuildAksPodsPortalUrl(azureOptions),
+                "pod",
+                "inventory"));
+        }
+
         var sortedChecks = checks
             .OrderBy(x => x.Category)
             .ThenBy(x => x.Name)
@@ -1360,6 +1396,47 @@ public sealed class InternalAdminController(
             sortedChecks);
 
         return Ok(new ApiEnvelope<InternalSystemHealthResponse>(response, HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("api-endpoints")]
+    [ProducesResponseType(typeof(ApiEnvelope<InternalApiCatalogResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public ActionResult<ApiEnvelope<InternalApiCatalogResponse>> GetApiEndpoints()
+    {
+        if (!IsInternalAdmin())
+        {
+            return Forbid();
+        }
+
+        var endpoints = apiDescriptionGroupCollectionProvider.ApiDescriptionGroups.Items
+            .SelectMany(group => group.Items.Select(item => new { group.GroupName, Item = item }))
+            .Select(x =>
+            {
+                var method = (x.Item.HttpMethod ?? "GET").ToUpperInvariant();
+                var route = NormalizeApiRoute(x.Item.RelativePath);
+                var authRequired = x.Item.ActionDescriptor.EndpointMetadata.OfType<AuthorizeAttribute>().Any();
+                var callCount = endpointRequestMetricsStore.GetCount(method, route);
+
+                return new InternalApiEndpointResponse(
+                    method,
+                    route,
+                    x.GroupName ?? "v1",
+                    authRequired,
+                    callCount,
+                    x.Item.ActionDescriptor.DisplayName ?? string.Empty);
+            })
+            .OrderBy(x => x.Route)
+            .ThenBy(x => x.Method)
+            .ToArray();
+
+        var response = new InternalApiCatalogResponse(
+            "https://api.gethuminex.com/swagger/index.html",
+            DateTime.UtcNow,
+            endpoints.Length,
+            endpoints.Sum(x => x.CallCount),
+            endpoints);
+
+        return Ok(new ApiEnvelope<InternalApiCatalogResponse>(response, HttpContext.TraceIdentifier));
     }
 
     private List<AzureResourceInventoryItem> BuildInventory(AzureResourceInventoryOptions azure)
@@ -1405,6 +1482,27 @@ public sealed class InternalAdminController(
     private static string BuildAksNamespacePortalUrl(AzureResourceInventoryOptions azure)
     {
         return BuildAksPodsPortalUrl(azure);
+    }
+
+    private static string NormalizeApiRoute(string? relativePath)
+    {
+        var route = (relativePath ?? string.Empty).Trim();
+        if (route.Length == 0)
+        {
+            return "/";
+        }
+
+        var queryIndex = route.IndexOf('?');
+        if (queryIndex >= 0)
+        {
+            route = route[..queryIndex];
+        }
+
+        route = route.Trim('/');
+        route = route.Replace("{version:apiVersion}", "{version}", StringComparison.OrdinalIgnoreCase);
+        route = RouteConstraintRegex.Replace(route, "{$1}");
+        route = route.StartsWith("api/", StringComparison.OrdinalIgnoreCase) ? route : $"api/{route}";
+        return $"/{route}".ToLowerInvariant();
     }
 
     private bool IsInternalAdmin()
@@ -1780,6 +1878,21 @@ public sealed record AzureResourceInventoryItem(
     string ResourceName,
     string PortalUrl,
     string Description);
+
+public sealed record InternalApiCatalogResponse(
+    string SwaggerUrl,
+    DateTime GeneratedAtUtc,
+    int EndpointCount,
+    long TotalCallCount,
+    IReadOnlyCollection<InternalApiEndpointResponse> Endpoints);
+
+public sealed record InternalApiEndpointResponse(
+    string Method,
+    string Route,
+    string ApiVersion,
+    bool AuthRequired,
+    long CallCount,
+    string OperationName);
 
 public sealed record InternalAdminQuoteResponse(
     Guid Id,

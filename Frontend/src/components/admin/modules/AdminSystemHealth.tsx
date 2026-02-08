@@ -11,13 +11,17 @@ const statusStyles: Record<string, string> = {
   degraded: "bg-amber-500/10 text-amber-500 border-amber-500/20",
   unhealthy: "bg-red-500/10 text-red-500 border-red-500/20",
   unknown: "bg-slate-500/10 text-slate-500 border-slate-500/20",
+  running: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+  pending: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+  crashloop: "bg-red-500/10 text-red-500 border-red-500/20",
+  failed: "bg-red-500/10 text-red-500 border-red-500/20",
+  succeeded: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
 };
 
 function getStatusIcon(status: string) {
   const normalized = status.toLowerCase();
-  if (normalized === "healthy") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-  if (normalized === "degraded") return <AlertTriangle className="h-4 w-4 text-amber-500" />;
-  if (normalized === "unknown") return <AlertTriangle className="h-4 w-4 text-slate-400" />;
+  if (normalized === "healthy" || normalized === "running" || normalized === "succeeded") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+  if (normalized === "degraded" || normalized === "pending" || normalized === "unknown") return <AlertTriangle className="h-4 w-4 text-amber-500" />;
   return <XCircle className="h-4 w-4 text-red-500" />;
 }
 
@@ -44,6 +48,17 @@ export const AdminSystemHealth = () => {
       unknown: checks.filter((item) => item.status === "unknown").length,
     };
   }, [data]);
+
+  const quickLinks = useMemo(() => {
+    const links = new Map<string, string>();
+    links.set("API Swagger", "https://api.gethuminex.com/swagger/index.html");
+    for (const check of data?.checks ?? []) {
+      if (check.portalUrl && check.portalUrl.startsWith("http")) {
+        links.set(check.name, check.portalUrl);
+      }
+    }
+    return Array.from(links.entries());
+  }, [data?.checks]);
 
   if (isLoading) {
     return (
@@ -131,6 +146,28 @@ export const AdminSystemHealth = () => {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Links</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {quickLinks.map(([label, href]) => (
+              <a
+                key={`${label}-${href}`}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-between rounded-md border px-3 py-2 text-sm hover:bg-muted/30"
+              >
+                <span className="truncate">{label}</span>
+                <ExternalLink className="h-3.5 w-3.5 ml-2 shrink-0" />
+              </a>
+            ))}
+          </div>
         </CardContent>
       </Card>
 

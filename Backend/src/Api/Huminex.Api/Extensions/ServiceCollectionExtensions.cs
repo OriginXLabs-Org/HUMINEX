@@ -45,6 +45,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditTrailRepository, AuditTrailRepository>();
         services.AddScoped<IPayrollDocumentStorage, PayrollDocumentStorage>();
         services.AddScoped<IBusinessEventPublisher, BusinessEventPublisher>();
+        services.AddSingleton<IEndpointRequestMetricsStore, EndpointRequestMetricsStore>();
+        services.AddSingleton<KubernetesPodStatusService>();
 
         var postgresOptions = configuration.GetSection(PostgresOptions.SectionName).Get<PostgresOptions>() ?? new PostgresOptions();
         services.AddDbContext<AppDbContext>(options =>
@@ -173,7 +175,9 @@ public static class ServiceCollectionExtensions
         });
 
         app.UseHttpsRedirection();
+        app.UseRouting();
         app.UseCors(HuminexCorsPolicy);
+        app.UseMiddleware<Huminex.Api.Middleware.EndpointRequestMetricsMiddleware>();
         app.UseAuthentication();
         app.UseMiddleware<Huminex.Api.Middleware.TenantContextGuardMiddleware>();
         app.UseAuthorization();

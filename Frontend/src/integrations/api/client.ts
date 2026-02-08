@@ -156,6 +156,23 @@ export type InternalSystemHealthResponse = {
   checks: InternalSystemHealthCheckResponse[];
 };
 
+export type InternalApiEndpointResponse = {
+  method: string;
+  route: string;
+  apiVersion: string;
+  authRequired: boolean;
+  callCount: number;
+  operationName: string;
+};
+
+export type InternalApiCatalogResponse = {
+  swaggerUrl: string;
+  generatedAtUtc: string;
+  endpointCount: number;
+  totalCallCount: number;
+  endpoints: InternalApiEndpointResponse[];
+};
+
 export type InternalAdminQuoteResponse = {
   id: string;
   tenantId: string;
@@ -516,6 +533,8 @@ export const huminexApi = {
     ),
   getInternalSystemHealth: (accessToken?: string) =>
     apiRequest<InternalSystemHealthResponse>("/admin/internal/system-health", {}, accessToken),
+  getInternalApiEndpoints: (accessToken?: string) =>
+    apiRequest<InternalApiCatalogResponse>("/admin/internal/api-endpoints", {}, accessToken),
   getInternalQuotes: (limit = 200, status = "all", search?: string, accessToken?: string) =>
     apiRequest<InternalAdminQuoteResponse[]>(
       `/admin/internal/quotes?limit=${limit}&status=${encodeURIComponent(status)}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
