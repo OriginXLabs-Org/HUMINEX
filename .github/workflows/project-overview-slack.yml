@@ -98,12 +98,12 @@ jobs:
             --arg im "$infra_mark" --arg is "$infra_conclusion" \
             --arg om "$openhuman_mark" --arg os "$openhuman_state" '
             . + [
-              {"type":"section","text":{"type":"mrkdwn","text":"*Tab 1: Project Tracker*\n" +
+              {"type":"section","text":{"type":"mrkdwn","text":("*Tab 1: Project Tracker*\n" +
                 $fm + " Frontend: *" + $fs + "*\n" +
                 $bm + " Backend: *" + $bs + "*\n" +
                 $em + " E2E Automation: *" + $es + "*\n" +
                 $im + " Azure/Infra: *" + $is + "*\n" +
-                $om + " OpenHuman: *" + $os + "*"}},
+                $om + " OpenHuman: *" + $os + "*")}},
               {"type":"section","text":{"type":"mrkdwn","text":"*Completed:* Internal Admin auth guardrails, audit logging, summary/users/tenants/quotes/invoices/billing/revenue/system endpoints, Swagger HUMINEX Admin grouping, CI + Slack pipeline cards.\n*Pending:* Replace remaining UI mock modules with backend APIs, OpenHuman full backend integration + dedicated pipeline, deeper Azure runtime telemetry consolidation."}},
               {"type":"divider"}
             ]
