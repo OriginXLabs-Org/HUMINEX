@@ -1511,9 +1511,60 @@ public sealed class InternalAdminController(
                 "Azure Redis Cache",
                 "Microsoft Entra ID"
             },
-            portals);
+            portals,
+            BuildModuleDeliveryTracker());
 
         return Ok(new ApiEnvelope<InternalArchitectureStatusResponse>(response, HttpContext.TraceIdentifier));
+    }
+
+    private static InternalModuleDeliveryTrackerResponse BuildModuleDeliveryTracker()
+    {
+        var now = DateTime.UtcNow;
+        var items = new[]
+        {
+            BuildDeliveryItem(1, "Identity & Access", "In Progress", "in_progress", "Harden policy matrix and admin/tenant auth boundaries", "Complete role-permission matrix tests and close pending auth edge-cases", now),
+            BuildDeliveryItem(2, "Workforce Management", "In Progress", "in_progress", "Move workforce module fully to backend-driven state", "Complete employee lifecycle CRUD/search + org chart write paths + telemetry", now),
+            BuildDeliveryItem(3, "Attendance & Leave OS", "Backlog", "pending", "Attendance events, leave policy, and approval workflow", "Create DB schema + APIs for punch/leave/apply/approve", now),
+            BuildDeliveryItem(4, "Payroll Engine", "Backlog", "pending", "Complete payroll run locking, approvals, and disbursement controls", "Add statutory snapshot and reconciliation APIs", now),
+            BuildDeliveryItem(5, "Recruitment & ATS", "Backlog", "pending", "Jobs, candidates, stages, interviews, offers", "Replace tenant recruitment static board with backend data", now),
+            BuildDeliveryItem(6, "Compliance & Risk", "Backlog", "pending", "Compliance register, obligations calendar, risk controls", "Add policy acknowledgment and escalation workflows", now),
+            BuildDeliveryItem(7, "Finance & Expense", "Backlog", "pending", "Expense claim, approvals, budgets, reimbursement", "Implement submit/approve/reject/settle APIs", now),
+            BuildDeliveryItem(8, "Projects & Tasks", "Backlog", "pending", "Projects, milestones, assignments, time entries", "Add project lifecycle endpoints and tenant scoping", now),
+            BuildDeliveryItem(9, "Announcements & Docs", "Backlog", "pending", "Publish, read receipt, acknowledge, secure documents", "Implement announcement feed and document access logs", now),
+            BuildDeliveryItem(10, "Assets & EMS", "Backlog", "pending", "Asset inventory, assignment, maintenance lifecycle", "Implement assign/return/maintenance workflows", now),
+            BuildDeliveryItem(11, "Performance Management", "Backlog", "pending", "Goals, review cycles, feedback and approvals", "Implement goal/review APIs with role checks", now),
+            BuildDeliveryItem(12, "BGV Suite", "Backlog", "pending", "Verification cases, checks, SLA and evidence tracking", "Create BGV case lifecycle and status transitions", now),
+            BuildDeliveryItem(13, "Proxima AI", "Backlog", "pending", "AI queries, usage metrics, recommendation controls", "Implement guarded AI usage APIs and telemetry", now),
+            BuildDeliveryItem(14, "OpZenix Automation", "Backlog", "pending", "Workflow definitions, execution logs, retry handling", "Implement workflow runtime and history endpoints", now),
+            BuildDeliveryItem(15, "Governance Layer", "Backlog", "pending", "Retention controls, attestations, access review cycles", "Add governance policy APIs and audit attestation flow", now)
+        };
+
+        return new InternalModuleDeliveryTrackerResponse(
+            "Identity & Access",
+            items.Length,
+            items.Count(x => string.Equals(x.Status, "completed", StringComparison.OrdinalIgnoreCase)),
+            items.Count(x => string.Equals(x.Status, "in_progress", StringComparison.OrdinalIgnoreCase)),
+            items.Count(x => string.Equals(x.Status, "blocked", StringComparison.OrdinalIgnoreCase)),
+            items);
+    }
+
+    private static InternalModuleDeliveryItemResponse BuildDeliveryItem(
+        int order,
+        string module,
+        string phase,
+        string status,
+        string scopeSummary,
+        string nextMilestone,
+        DateTime lastUpdatedUtc)
+    {
+        return new InternalModuleDeliveryItemResponse(
+            order,
+            module,
+            phase,
+            status,
+            scopeSummary,
+            nextMilestone,
+            lastUpdatedUtc);
     }
 
     private List<AzureResourceInventoryItem> BuildInventory(AzureResourceInventoryOptions azure)
@@ -2006,7 +2057,25 @@ public sealed record InternalArchitectureStatusResponse(
     string Title,
     string Notes,
     IReadOnlyCollection<string> TechStack,
-    IReadOnlyCollection<InternalPortalArchitectureStatusResponse> Portals);
+    IReadOnlyCollection<InternalPortalArchitectureStatusResponse> Portals,
+    InternalModuleDeliveryTrackerResponse DeliveryTracker);
+
+public sealed record InternalModuleDeliveryTrackerResponse(
+    string CurrentModule,
+    int TotalModules,
+    int CompletedModules,
+    int InProgressModules,
+    int BlockedModules,
+    IReadOnlyCollection<InternalModuleDeliveryItemResponse> Items);
+
+public sealed record InternalModuleDeliveryItemResponse(
+    int Order,
+    string Module,
+    string Phase,
+    string Status,
+    string ScopeSummary,
+    string NextMilestone,
+    DateTime LastUpdatedUtc);
 
 public sealed record InternalPortalArchitectureStatusResponse(
     string Name,

@@ -37,6 +37,7 @@
     {
       "group": "Operations",
       "pages": [
+        "operations/module-delivery-tracker",
         "operations/release-versioning",
         "operations/source-of-truth"
       ]

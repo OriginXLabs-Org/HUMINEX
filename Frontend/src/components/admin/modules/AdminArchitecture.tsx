@@ -9,11 +9,16 @@ import { CheckCircle2, CircleDashed, Loader2 } from "lucide-react";
 const statusClass: Record<string, string> = {
   completed: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
   pending: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  in_progress: "bg-blue-500/10 text-blue-300 border-blue-500/30",
+  blocked: "bg-rose-500/10 text-rose-300 border-rose-500/30",
 };
 
 function moduleStatusIcon(status: string) {
   if (status === "completed") {
     return <CheckCircle2 className="h-4 w-4 text-emerald-400" />;
+  }
+  if (status === "in_progress") {
+    return <Loader2 className="h-4 w-4 text-blue-300 animate-spin" />;
   }
   return <CircleDashed className="h-4 w-4 text-amber-400" />;
 }
@@ -37,6 +42,7 @@ export const AdminArchitecture = () => {
   }
 
   const portals = data?.portals ?? [];
+  const deliveryTracker = data?.deliveryTracker;
 
   return (
     <div className="space-y-6">
@@ -55,6 +61,52 @@ export const AdminArchitecture = () => {
           {(data?.techStack ?? []).map((item) => (
             <Badge key={item} variant="outline">{item}</Badge>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>15-Module Delivery Tracker</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div className="rounded-lg border p-3 bg-muted/20">
+              <p className="text-xs text-muted-foreground">Current Module</p>
+              <p className="text-sm font-semibold mt-1">{deliveryTracker?.currentModule ?? "-"}</p>
+            </div>
+            <div className="rounded-lg border p-3 bg-muted/20">
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-sm font-semibold mt-1">{deliveryTracker?.totalModules ?? 0}</p>
+            </div>
+            <div className="rounded-lg border p-3 bg-muted/20">
+              <p className="text-xs text-muted-foreground">Completed</p>
+              <p className="text-sm font-semibold mt-1 text-emerald-400">{deliveryTracker?.completedModules ?? 0}</p>
+            </div>
+            <div className="rounded-lg border p-3 bg-muted/20">
+              <p className="text-xs text-muted-foreground">In Progress</p>
+              <p className="text-sm font-semibold mt-1 text-blue-300">{deliveryTracker?.inProgressModules ?? 0}</p>
+            </div>
+            <div className="rounded-lg border p-3 bg-muted/20">
+              <p className="text-xs text-muted-foreground">Blocked</p>
+              <p className="text-sm font-semibold mt-1 text-rose-300">{deliveryTracker?.blockedModules ?? 0}</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {(deliveryTracker?.items ?? []).map((item) => (
+              <div key={item.order} className="rounded-lg border p-3 bg-muted/20">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-medium text-sm">{item.order}. {item.module}</p>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{item.phase}</Badge>
+                    <Badge variant="outline" className={statusClass[item.status] || ""}>{item.status}</Badge>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">{item.scopeSummary}</p>
+                <p className="text-xs text-muted-foreground mt-1">Next: {item.nextMilestone}</p>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 

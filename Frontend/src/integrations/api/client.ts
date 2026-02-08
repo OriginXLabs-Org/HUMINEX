@@ -221,6 +221,22 @@ export type InternalArchitectureStatusResponse = {
   notes: string;
   techStack: string[];
   portals: InternalPortalArchitectureStatusResponse[];
+  deliveryTracker: {
+    currentModule: string;
+    totalModules: number;
+    completedModules: number;
+    inProgressModules: number;
+    blockedModules: number;
+    items: Array<{
+      order: number;
+      module: string;
+      phase: string;
+      status: string;
+      scopeSummary: string;
+      nextMilestone: string;
+      lastUpdatedUtc: string;
+    }>;
+  };
 };
 
 export type InternalAdminQuoteResponse = {
