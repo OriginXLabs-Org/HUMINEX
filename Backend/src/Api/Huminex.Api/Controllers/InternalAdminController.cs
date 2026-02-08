@@ -1286,21 +1286,125 @@ public sealed class InternalAdminController(
         }
 
         var report = await healthCheckService.CheckHealthAsync(_ => true, cancellationToken);
-        var checks = report.Entries
-            .Select(entry => new InternalSystemHealthCheckResponse(
-                entry.Key,
-                entry.Value.Status.ToString().ToLowerInvariant(),
-                $"{entry.Value.Duration.TotalMilliseconds:0}ms",
-                entry.Value.Description ?? string.Empty))
-            .OrderBy(x => x.Name)
+        var azureOptions = internalAdminOptions.Value.Azure ?? new AzureResourceInventoryOptions();
+        var inventory = BuildInventory(azureOptions);
+        var healthByName = report.Entries
+            .ToDictionary(
+                entry => entry.Key.Trim().ToLowerInvariant(),
+                entry => entry.Value,
+                StringComparer.OrdinalIgnoreCase);
+
+        var checks = new List<InternalSystemHealthCheckResponse>(inventory.Count + 2);
+        foreach (var item in inventory)
+        {
+            var key = item.HealthCheckName.Trim().ToLowerInvariant();
+            if (healthByName.TryGetValue(key, out var entry))
+            {
+                checks.Add(new InternalSystemHealthCheckResponse(
+                    item.DisplayName,
+                    entry.Status.ToString().ToLowerInvariant(),
+                    $"{entry.Duration.TotalMilliseconds:0}ms",
+                    entry.Description ?? item.Description,
+                    item.Category,
+                    item.PortalUrl,
+                    item.ResourceType,
+                    item.ResourceName));
+                continue;
+            }
+
+            checks.Add(new InternalSystemHealthCheckResponse(
+                item.DisplayName,
+                "unknown",
+                "n/a",
+                item.Description,
+                item.Category,
+                item.PortalUrl,
+                item.ResourceType,
+                item.ResourceName));
+        }
+
+        // Expose current AKS runtime process context so internal admins can quickly identify the active pod.
+        var podName = Environment.GetEnvironmentVariable("POD_NAME")
+            ?? Environment.GetEnvironmentVariable("HOSTNAME")
+            ?? "unknown";
+        var nodeName = Environment.GetEnvironmentVariable("AKS_NODE_NAME")
+            ?? Environment.GetEnvironmentVariable("NODE_NAME")
+            ?? "unknown";
+        checks.Add(new InternalSystemHealthCheckResponse(
+            "AKS Runtime Pod",
+            string.Equals(podName, "unknown", StringComparison.OrdinalIgnoreCase) ? "unknown" : "healthy",
+            "n/a",
+            $"Current API pod: {podName}; node: {nodeName}",
+            "aks",
+            BuildAksPodsPortalUrl(azureOptions),
+            "pod",
+            podName));
+        checks.Add(new InternalSystemHealthCheckResponse(
+            "AKS Runtime Namespace",
+            "healthy",
+            "n/a",
+            $"Namespace: {azureOptions.AksNamespace}",
+            "aks",
+            BuildAksNamespacePortalUrl(azureOptions),
+            "namespace",
+            azureOptions.AksNamespace));
+
+        var sortedChecks = checks
+            .OrderBy(x => x.Category)
+            .ThenBy(x => x.Name)
             .ToArray();
 
         var response = new InternalSystemHealthResponse(
             report.Status.ToString().ToLowerInvariant(),
             DateTime.UtcNow,
-            checks);
+            sortedChecks);
 
         return Ok(new ApiEnvelope<InternalSystemHealthResponse>(response, HttpContext.TraceIdentifier));
+    }
+
+    private List<AzureResourceInventoryItem> BuildInventory(AzureResourceInventoryOptions azure)
+    {
+        return
+        [
+            new AzureResourceInventoryItem("self", "API Service", "core", "app", "huminex-api", configuration["InternalAdmin:Azure:ApiPublicUrl"] ?? "https://api.gethuminex.com", "API process readiness check"),
+            new AzureResourceInventoryItem("postgres", "Azure PostgreSQL", "data", "postgresqlFlexibleServer", azure.PostgresServerName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.DBforPostgreSQL/flexibleServers", azure.PostgresServerName), "Primary transactional database"),
+            new AzureResourceInventoryItem("redis", "Azure Cache for Redis", "cache", "redis", azure.RedisName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Cache/redis", azure.RedisName), "Distributed cache and token/session acceleration"),
+            new AzureResourceInventoryItem("servicebus", "Azure Service Bus", "messaging", "serviceBusNamespace", azure.ServiceBusNamespace, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.ServiceBus/namespaces", azure.ServiceBusNamespace), "Event bus and async workflows"),
+            new AzureResourceInventoryItem("blobstorage", "Azure Blob Storage", "storage", "storageAccount", azure.StorageAccountName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Storage/storageAccounts", azure.StorageAccountName), "Documents and artifacts storage"),
+            new AzureResourceInventoryItem("aks-cluster", "AKS Cluster", "aks", "managedCluster", azure.AksClusterName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.ContainerService/managedClusters", azure.AksClusterName), "Kubernetes control plane"),
+            new AzureResourceInventoryItem("acr", "Azure Container Registry", "containers", "containerRegistry", azure.AcrName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.ContainerRegistry/registries", azure.AcrName), "Container images"),
+            new AzureResourceInventoryItem("keyvault", "Azure Key Vault", "security", "vault", azure.KeyVaultName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.KeyVault/vaults", azure.KeyVaultName), "Secrets and certificates"),
+            new AzureResourceInventoryItem("appinsights", "Application Insights", "observability", "applicationInsights", azure.ApplicationInsightsName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.Insights/components", azure.ApplicationInsightsName), "APM, traces, and failures"),
+            new AzureResourceInventoryItem("loganalytics", "Log Analytics Workspace", "observability", "logAnalyticsWorkspace", azure.LogAnalyticsWorkspaceName, BuildPortalResourceUrl(azure.SubscriptionId, azure.ResourceGroup, "Microsoft.OperationalInsights/workspaces", azure.LogAnalyticsWorkspaceName), "Central log query workspace")
+        ];
+    }
+
+    private static string BuildPortalResourceUrl(string subscriptionId, string resourceGroup, string resourceType, string resourceName)
+    {
+        if (string.IsNullOrWhiteSpace(subscriptionId) || string.IsNullOrWhiteSpace(resourceGroup) || string.IsNullOrWhiteSpace(resourceName))
+        {
+            return "https://portal.azure.com";
+        }
+
+        var encodedType = string.Join("/", resourceType.Trim('/').Split('/').Select(Uri.EscapeDataString));
+        var encodedName = Uri.EscapeDataString(resourceName);
+        return $"https://portal.azure.com/#@/resource/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{encodedType}/{encodedName}/overview";
+    }
+
+    private static string BuildAksPodsPortalUrl(AzureResourceInventoryOptions azure)
+    {
+        if (string.IsNullOrWhiteSpace(azure.SubscriptionId))
+        {
+            return "https://portal.azure.com";
+        }
+
+        var clusterResourcePath = $"subscriptions/{azure.SubscriptionId}/resourceGroups/{azure.ResourceGroup}/providers/Microsoft.ContainerService/managedClusters/{azure.AksClusterName}";
+        return $"https://portal.azure.com/#blade/Microsoft_Azure_ContainerService/ManagedClusterPodsBlade/selectedResourceId/{Uri.EscapeDataString(clusterResourcePath)}/namespace/{Uri.EscapeDataString(azure.AksNamespace)}";
+    }
+
+    private static string BuildAksNamespacePortalUrl(AzureResourceInventoryOptions azure)
+    {
+        return BuildAksPodsPortalUrl(azure);
     }
 
     private bool IsInternalAdmin()
@@ -1662,6 +1766,19 @@ public sealed record InternalSystemHealthCheckResponse(
     string Name,
     string Status,
     string Latency,
+    string Description,
+    string Category,
+    string PortalUrl,
+    string ResourceType,
+    string ResourceName);
+
+public sealed record AzureResourceInventoryItem(
+    string HealthCheckName,
+    string DisplayName,
+    string Category,
+    string ResourceType,
+    string ResourceName,
+    string PortalUrl,
     string Description);
 
 public sealed record InternalAdminQuoteResponse(

@@ -144,6 +144,10 @@ export type InternalSystemHealthCheckResponse = {
   status: string;
   latency: string;
   description: string;
+  category: string;
+  portalUrl: string;
+  resourceType: string;
+  resourceName: string;
 };
 
 export type InternalSystemHealthResponse = {

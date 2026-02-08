@@ -4,18 +4,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { huminexApi } from "@/integrations/api/client";
-import { Activity, CheckCircle2, AlertTriangle, XCircle, RefreshCw, Loader2 } from "lucide-react";
+import { Activity, CheckCircle2, AlertTriangle, XCircle, RefreshCw, Loader2, ExternalLink } from "lucide-react";
 
 const statusStyles: Record<string, string> = {
   healthy: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   degraded: "bg-amber-500/10 text-amber-500 border-amber-500/20",
   unhealthy: "bg-red-500/10 text-red-500 border-red-500/20",
+  unknown: "bg-slate-500/10 text-slate-500 border-slate-500/20",
 };
 
 function getStatusIcon(status: string) {
   const normalized = status.toLowerCase();
   if (normalized === "healthy") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
   if (normalized === "degraded") return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+  if (normalized === "unknown") return <AlertTriangle className="h-4 w-4 text-slate-400" />;
   return <XCircle className="h-4 w-4 text-red-500" />;
 }
 
@@ -28,7 +30,7 @@ export const AdminSystemHealth = () => {
   } = useQuery({
     queryKey: ["internal-admin-system-health"],
     queryFn: () => huminexApi.getInternalSystemHealth(),
-    refetchInterval: 15000,
+    refetchInterval: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
@@ -39,6 +41,7 @@ export const AdminSystemHealth = () => {
       healthy: checks.filter((item) => item.status === "healthy").length,
       degraded: checks.filter((item) => item.status === "degraded").length,
       unhealthy: checks.filter((item) => item.status === "unhealthy").length,
+      unknown: checks.filter((item) => item.status === "unknown").length,
     };
   }, [data]);
 
@@ -57,7 +60,7 @@ export const AdminSystemHealth = () => {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-heading font-bold text-foreground mb-2">System Health Dashboard</h1>
-          <p className="text-muted-foreground">Live infrastructure checks from HUMINEX backend health providers</p>
+          <p className="text-muted-foreground">Live infrastructure checks with Azure links, AKS runtime details, and backend dependency signals</p>
         </div>
         <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
@@ -105,11 +108,24 @@ export const AdminSystemHealth = () => {
                     <div>
                       <p className="font-medium text-foreground">{check.name}</p>
                       <p className="text-xs text-muted-foreground">{check.description || "No description"}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {check.category || "general"} • {check.resourceType || "resource"} • {check.resourceName || "-"}
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right space-y-1">
                     <Badge variant="outline" className={statusStyles[check.status] || ""}>{check.status}</Badge>
                     <p className="text-xs text-muted-foreground mt-1">{check.latency}</p>
+                    {check.portalUrl && (
+                      <a
+                        className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"
+                        href={check.portalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open in Azure <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
                   </div>
                 </div>
               ))}
@@ -119,7 +135,8 @@ export const AdminSystemHealth = () => {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Last checked: {data?.checkedAtUtc ? new Date(data.checkedAtUtc).toLocaleString() : "-"}
+        Last checked: {data?.checkedAtUtc ? new Date(data.checkedAtUtc).toLocaleString() : "-"} • Auto-refresh: every 30 minutes •
+        Unknown checks: {counts.unknown}
       </p>
     </div>
   );
