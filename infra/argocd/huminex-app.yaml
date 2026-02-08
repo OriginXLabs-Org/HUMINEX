@@ -18,3 +18,11 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+  # HPA controls replicas at runtime; avoid perpetual OutOfSync from /spec/replicas drift.
+  ignoreDifferences:
+    - group: argoproj.io
+      kind: Rollout
+      name: huminex-api
+      namespace: huminex
+      jsonPointers:
+        - /spec/replicas
