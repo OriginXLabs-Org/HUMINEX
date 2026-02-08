@@ -1522,7 +1522,7 @@ public sealed class InternalAdminController(
         var now = DateTime.UtcNow;
         var items = new[]
         {
-            BuildDeliveryItem(1, "Identity & Access", "In Progress", "in_progress", "Harden policy matrix and admin/tenant auth boundaries", "Complete role-permission matrix tests and close pending auth edge-cases", now),
+            BuildDeliveryItem(1, "Identity & Access", "Deployed (Argo/Azure)", "completed", "RBAC baseline, role->permission matrix, and strict identity/tenant guards shipped", "Closed for now; monitor auth telemetry and regressions", now),
             BuildDeliveryItem(2, "Workforce Management", "In Progress", "in_progress", "Move workforce module fully to backend-driven state", "Complete employee lifecycle CRUD/search + org chart write paths + telemetry", now),
             BuildDeliveryItem(3, "Attendance & Leave OS", "Backlog", "pending", "Attendance events, leave policy, and approval workflow", "Create DB schema + APIs for punch/leave/apply/approve", now),
             BuildDeliveryItem(4, "Payroll Engine", "Backlog", "pending", "Complete payroll run locking, approvals, and disbursement controls", "Add statutory snapshot and reconciliation APIs", now),
@@ -1540,7 +1540,7 @@ public sealed class InternalAdminController(
         };
 
         return new InternalModuleDeliveryTrackerResponse(
-            "Identity & Access",
+            "Workforce Management",
             items.Length,
             items.Count(x => string.Equals(x.Status, "completed", StringComparison.OrdinalIgnoreCase)),
             items.Count(x => string.Equals(x.Status, "in_progress", StringComparison.OrdinalIgnoreCase)),
