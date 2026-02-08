@@ -18,6 +18,40 @@ EnvFileLoader.Load(
 
 var builder = WebApplication.CreateBuilder(args);
 
+string[] BuildValidAudiences(IEnumerable<string?> configuredAudiences, string? audience, string? clientId)
+{
+    static bool IsPlaceholder(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        var normalized = value.Trim();
+        return normalized.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase)
+               || normalized.Equals("REPLACE_ME", StringComparison.OrdinalIgnoreCase)
+               || normalized.Equals("CHANGE_ME", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static string[] ExpandAudience(string value)
+    {
+        var normalized = value.Trim();
+        if (!normalized.StartsWith("api://", StringComparison.OrdinalIgnoreCase))
+        {
+            return [normalized];
+        }
+
+        var withoutScheme = normalized["api://".Length..].TrimEnd('/');
+        return string.IsNullOrWhiteSpace(withoutScheme)
+            ? [normalized]
+            : [normalized, withoutScheme];
+    }
+
+    return configuredAudiences
+        .Concat([audience, clientId])
+        .Where(value => !IsPlaceholder(value))
+        .SelectMany(value => ExpandAudience(value!))
+        .Where(value => !string.IsNullOrWhiteSpace(value))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+
 builder.Configuration.AddEnvironmentVariables(prefix: "HUMINEX_");
 
 var appConfigEndpoint = builder.Configuration["AzureAppConfiguration:Endpoint"];
@@ -58,27 +92,15 @@ builder.Services
             jwtOptions.TokenValidationParameters.RoleClaimType = "roles";
             jwtOptions.TokenValidationParameters.NameClaimType = "preferred_username";
 
-            var configuredAudiences = builder.Configuration.GetSection("AzureAd:ValidAudiences").Get<string[]>();
-            if (configuredAudiences is { Length: > 0 })
-            {
-                jwtOptions.TokenValidationParameters.ValidAudiences = configuredAudiences;
-            }
-            else
-            {
-                var fallbackAudiences = new[]
-                {
-                    builder.Configuration["AzureAd:Audience"],
-                    builder.Configuration["AzureAd:ClientId"],
-                }
-                .Where(audience => !string.IsNullOrWhiteSpace(audience))
-                .Cast<string>()
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+            var configuredAudiences = builder.Configuration.GetSection("AzureAd:ValidAudiences").Get<string[]>() ?? [];
+            var allAudiences = BuildValidAudiences(
+                configuredAudiences,
+                builder.Configuration["AzureAd:Audience"],
+                builder.Configuration["AzureAd:ClientId"]);
 
-                if (fallbackAudiences.Length > 0)
-                {
-                    jwtOptions.TokenValidationParameters.ValidAudiences = fallbackAudiences;
-                }
+            if (allAudiences.Length > 0)
+            {
+                jwtOptions.TokenValidationParameters.ValidAudiences = allAudiences;
             }
         },
         msIdentityOptions => builder.Configuration.Bind("AzureAd", msIdentityOptions));
