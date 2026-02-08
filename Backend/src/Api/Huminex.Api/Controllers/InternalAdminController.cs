@@ -1464,7 +1464,8 @@ public sealed class InternalAdminController(
             BuildModule("Employee Organization Data", HasRoutePrefix("/api/v{version}/org"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/org"),
             BuildModule("Employee Workforce Operations", HasRoutePrefix("/api/v{version}/workforce"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/workforce"),
             BuildModule("Employee Payroll Access", HasRoutePrefix("/api/v{version}/payroll"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/payroll"),
-            BuildModule("Employee OpenHuman Features", HasRoutePrefix("/api/v{version}/openhuman"), ".NET 8 Web API, OpenAI/AI integrations", "/api/v{version}/openhuman")
+            BuildModule("Employee OpenHuman Features", HasRoutePrefix("/api/v{version}/openhuman"), ".NET 8 Web API, OpenAI/AI integrations", "/api/v{version}/openhuman"),
+            BuildModule("Employee Self-Service Automation (advanced workflows)", false, ".NET worker + orchestration APIs (planned)", "/api/v{version}/workforce")
         };
 
         var employerModules = new[]
@@ -1473,7 +1474,8 @@ public sealed class InternalAdminController(
             BuildModule("Employer Invoice Management", HasRoutePrefix("/api/v{version}/admin/internal/invoices"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/admin/internal/invoices"),
             BuildModule("Employer Billing Insights", HasRoutePrefix("/api/v{version}/admin/internal/tenant-billing"), ".NET 8 Web API, analytics endpoints", "/api/v{version}/admin/internal/tenant-billing"),
             BuildModule("Employer Onboarding Operations", HasRoutePrefix("/api/v{version}/admin/internal/employers"), ".NET 8 Web API, EF Core, PostgreSQL", "/api/v{version}/admin/internal/employers"),
-            BuildModule("Employer Activity & Audit", HasRoutePrefix("/api/v{version}/admin/internal/employers", "/api/v{version}/admin/internal/audit-logs"), ".NET 8 Web API, audit trail persistence", "/api/v{version}/admin/internal/audit-logs")
+            BuildModule("Employer Activity & Audit", HasRoutePrefix("/api/v{version}/admin/internal/employers", "/api/v{version}/admin/internal/audit-logs"), ".NET 8 Web API, audit trail persistence", "/api/v{version}/admin/internal/audit-logs"),
+            BuildModule("Employer Predictive Insights (advanced forecasting)", false, ".NET analytics service + historical model training (planned)", "/api/v{version}/admin/internal/revenue-analytics")
         };
 
         var internalModules = new[]
@@ -1483,7 +1485,8 @@ public sealed class InternalAdminController(
             BuildModule("Internal System Health & AKS Pod Monitoring", HasRoutePrefix("/api/v{version}/admin/internal/system-health"), ".NET 8 Web API, HealthChecks, Kubernetes API", "/api/v{version}/admin/internal/system-health"),
             BuildModule("Internal AI/Automation Control", HasRoutePrefix("/api/v{version}/admin/internal/ai-dashboard", "/api/v{version}/admin/internal/automation-logs"), ".NET 8 Web API, analytics and automation modules", "/api/v{version}/admin/internal/ai-dashboard"),
             BuildModule("Internal Platform Security & Audit", HasRoutePrefix("/api/v{version}/admin/internal/system-logs", "/api/v{version}/admin/internal/audit-logs"), ".NET 8 Web API, audit/security telemetry", "/api/v{version}/admin/internal/system-logs"),
-            BuildModule("Internal Architecture Tracking Board", true, "Frontend module with backend architecture status endpoint", "/api/v{version}/admin/internal/architecture-status")
+            BuildModule("Internal Architecture Tracking Board", true, "Frontend module with backend architecture status endpoint", "/api/v{version}/admin/internal/architecture-status"),
+            BuildModule("Internal Unified Real-time Module Telemetry (all admin modules)", false, ".NET event stream + module-level instrumentation (planned)", "/api/v{version}/admin/internal/system-logs")
         };
 
         var portals = new[]
